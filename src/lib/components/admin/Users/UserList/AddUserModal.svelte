@@ -25,17 +25,25 @@
 		name: '',
 		email: '',
 		password: '',
-		role: 'user'
+		role: 'user',
+		team: '',
+		headquarters: '',
+		division: '',
+		position: ''
 	};
 
-	$: if (show) {
-		_user = {
-			name: '',
-			email: '',
-			password: '',
-			role: 'user'
-		};
-	}
+$: if (show) {
+    _user = {
+        name: '',
+        email: '',
+        password: '',
+        role: 'user',
+        team: '',
+        headquarters: '',
+        division: '',
+        position: ''
+    };
+}
 
 	const submitHandler = async () => {
 		const stopLoading = () => {
@@ -44,6 +52,24 @@
 		};
 
 		if (tab === '') {
+			// Validate required organization fields
+			if (!_user.team?.trim()) {
+				toast.error('소속을 입력해주세요.');
+				return;
+			}
+			if (!_user.headquarters?.trim()) {
+				toast.error('본부를 입력해주세요.');
+				return;
+			}
+			if (!_user.division?.trim()) {
+				toast.error('부문을 입력해주세요.');
+				return;
+			}
+			if (!_user.position?.trim()) {
+				toast.error('직급(직책)을 입력해주세요.');
+				return;
+			}
+
 			loading = true;
 
 			const res = await addUser(
@@ -52,7 +78,11 @@
 				_user.email,
 				_user.password,
 				_user.role,
-				generateInitialsImage(_user.name)
+				generateInitialsImage(_user.name),
+				_user.team,
+				_user.headquarters,
+				_user.division,
+				_user.position
 			).catch((error) => {
 				toast.error(`${error}`);
 			});
@@ -234,6 +264,58 @@
 										placeholder={$i18n.t('Enter Your Password')}
 										autocomplete="off"
 										required
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full mt-2">
+								<div class=" mb-1 text-xs text-gray-500">소속</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.team}
+										placeholder="AI&DATA팀"
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full mt-1">
+								<div class=" mb-1 text-xs text-gray-500">본부</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.headquarters}
+										placeholder="클라우드본부"
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full mt-1">
+								<div class=" mb-1 text-xs text-gray-500">부문</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.division}
+										placeholder="미래성장부문"
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full mt-1">
+								<div class=" mb-1 text-xs text-gray-500">직급(직책)</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.position}
+										placeholder="프로(선임)"
 									/>
 								</div>
 							</div>

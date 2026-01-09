@@ -38,6 +38,7 @@ from open_webui.utils.tools import get_tools
 from open_webui.utils.access_control import has_access
 
 from open_webui.env import SRC_LOG_LEVELS, GLOBAL_LOG_LEVEL
+from open_webui.constants import SSE_RESPONSE_HEADERS
 
 from open_webui.utils.misc import (
     add_or_update_system_message,
@@ -335,7 +336,11 @@ async def generate_function_chat_completion(
                 yield f"data: {json.dumps(finish_message)}\n\n"
                 yield "data: [DONE]"
 
-        return StreamingResponse(stream_content(), media_type="text/event-stream")
+        return StreamingResponse(
+            stream_content(),
+            media_type="text/event-stream",
+            headers=SSE_RESPONSE_HEADERS,
+        )
     else:
         try:
             res = await execute_pipe(pipe, params)

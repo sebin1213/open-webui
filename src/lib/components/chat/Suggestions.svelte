@@ -76,7 +76,9 @@
 				? ' -mt-1'
 				: 'text-center items-center justify-center'}  self-start text-gray-600 dark:text-gray-400"
 		>
-			{$WEBUI_NAME} ‧ v{WEBUI_VERSION}
+			<!-- 버전 명시 비활성화 -->
+			<!-- {$WEBUI_NAME} ‧ v{WEBUI_VERSION} -->
+			{$WEBUI_NAME}
 		</div>
 	{/if}
 </div>

@@ -160,6 +160,21 @@ We offer various installation alternatives, including non-Docker native installa
 
 Look at the [Local Development Guide](https://docs.openwebui.com/getting-started/advanced-topics/development) for instructions on setting up a local development environment.
 
+#### Migrating Existing SQLite Data to PostgreSQL
+
+Open WebUI now supports starting with PostgreSQL while reusing an existing SQLite database. When you transition, first configure the following environment variables (they are already included in the provided `docker-compose.yaml` example):
+
+- `DATABASE_MIGRATE_FROM_SQLITE=true`
+- `DATABASE_SQLITE_PATH=/app/backend/data/webui.db` (or the absolute path to your SQLite file)
+
+마이그레이션은 전용 명령으로 한 번만 실행하면 됩니다. 기존 SQLite 데이터를 PostgreSQL로 옮길 때 아래 명령을 사용하세요.
+
+```bash
+docker compose run --rm open-webui python3 run_initial_migration.py
+```
+
+명령이 성공하면 Postgres 테이블이 준비되므로 이후에는 평소처럼 `docker compose up -d`로 서비스를 기동하면 됩니다. 필요 시 언제든 동일 명령을 다시 실행할 수 있지만 일반적으로는 최초 1회면 충분합니다.
+
 ### Troubleshooting
 
 Encountering connection issues? Our [Open WebUI Documentation](https://docs.openwebui.com/troubleshooting/) has got you covered. For further assistance and to join our vibrant community, visit the [Open WebUI Discord](https://discord.gg/5rJgQTnV4s).

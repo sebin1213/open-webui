@@ -1,4 +1,5 @@
 import time
+import re
 from typing import Optional
 
 from open_webui.internal.db import Base, JSONField, get_db
@@ -11,8 +12,8 @@ from open_webui.utils.misc import throttle
 
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, Column, String, Text, Date
-from sqlalchemy import or_
+from sqlalchemy import BigInteger, Column, String, Text, cast, Date
+from sqlalchemy import or_, func
 
 import datetime
 
@@ -148,9 +149,26 @@ class UserUpdateForm(BaseModel):
     email: str
     profile_image_url: str
     password: Optional[str] = None
+    team: Optional[str] = None
+    division: Optional[str] = None
+    position: Optional[str] = None
+    headquarters: Optional[str] = None
 
 
 class UsersTable:
+    @staticmethod
+    def _sanitize_strings_in_obj(obj):
+        """Trim leading/trailing whitespace from all string values in nested structures."""
+        if isinstance(obj, dict):
+            return {k: UsersTable._sanitize_strings_in_obj(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [UsersTable._sanitize_strings_in_obj(v) for v in obj]
+        if isinstance(obj, str):
+            s = obj.strip()
+            # Remove all internal whitespace between words as well
+            s = re.sub(r"\s+", "", s)
+            return s
+        return obj
     def insert_new_user(
         self,
         id: str,
@@ -223,16 +241,47 @@ class UsersTable:
     ) -> dict:
         with get_db() as db:
             query = db.query(User)
+            dialect_name = getattr(getattr(db, 'bind', None), 'dialect', None)
+            dialect_name = getattr(dialect_name, 'name', '') if dialect_name else ''
 
             if filter:
                 query_key = filter.get("query")
                 if query_key:
-                    query = query.filter(
-                        or_(
-                            User.name.ilike(f"%{query_key}%"),
-                            User.email.ilike(f"%{query_key}%"),
-                        )
-                    )
+                    # Build both raw and whitespace-agnostic patterns
+                    like = f"%{query_key}%"
+                    query_key_nospace = re.sub(r"\s+", "", str(query_key)).strip()
+                    like_nospace = f"%{query_key_nospace}%"
+                    conditions = [
+                        # Raw matches
+                        User.name.ilike(like),
+                        User.email.ilike(like),
+                        cast(User.info, String).ilike(like),
+                        # Space-insensitive matches
+                        func.replace(User.name, " ", "").ilike(like_nospace),
+                        func.replace(User.email, " ", "").ilike(like_nospace),
+                        func.replace(cast(User.info, String), " ", "").ilike(like_nospace),
+                    ]
+
+                    # For SQLite (JSON1), query individual keys for more reliable matches
+                    if dialect_name == "sqlite":
+                        try:
+                            conditions.extend(
+                                [
+                                    func.json_extract(User.info, "$.team").ilike(like),
+                                    func.json_extract(User.info, "$.division").ilike(like),
+                                    func.json_extract(User.info, "$.position").ilike(like),
+                                    func.json_extract(User.info, "$.headquarters").ilike(like),
+                                    # Space-insensitive JSON key matches
+                                    func.replace(func.json_extract(User.info, "$.team"), " ", "").ilike(like_nospace),
+                                    func.replace(func.json_extract(User.info, "$.division"), " ", "").ilike(like_nospace),
+                                    func.replace(func.json_extract(User.info, "$.position"), " ", "").ilike(like_nospace),
+                                    func.replace(func.json_extract(User.info, "$.headquarters"), " ", "").ilike(like_nospace),
+                                ]
+                            )
+                        except Exception:
+                            pass
+
+                    query = query.filter(or_(*conditions))
 
                 order_by = filter.get("order_by")
                 direction = filter.get("direction")
@@ -377,6 +426,9 @@ class UsersTable:
     def update_user_by_id(self, id: str, updated: dict) -> Optional[UserModel]:
         try:
             with get_db() as db:
+                # Sanitize info payload strings by trimming whitespace
+                if "info" in updated and isinstance(updated["info"], dict):
+                    updated = {**updated, "info": UsersTable._sanitize_strings_in_obj(updated["info"]) }
                 db.query(User).filter_by(id=id).update(updated)
                 db.commit()
 
@@ -453,6 +505,28 @@ class UsersTable:
                 return UserModel.model_validate(user)
             else:
                 return None
+
+    def get_user_info_by_ids(self, user_ids: list[str]) -> dict:
+        """
+        Get user information (name, email) for a list of user IDs.
+        Returns dictionary mapping user_id to user info.
+        """
+        try:
+            with get_db() as db:
+                users = db.query(User).filter(User.id.in_(user_ids)).all()
+                
+                user_info = {}
+                for user in users:
+                    user_info[user.id] = {
+                        'name': user.name,
+                        'email': user.email,
+                        'role': user.role
+                    }
+                
+                return user_info
+                
+        except Exception as e:
+            return {}
 
 
 Users = UsersTable()

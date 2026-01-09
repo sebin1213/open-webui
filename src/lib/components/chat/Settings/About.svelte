@@ -50,14 +50,16 @@
 			<div class=" mb-2.5 text-sm font-medium flex space-x-2 items-center">
 				<div>
 					{$WEBUI_NAME}
-					{$i18n.t('Version')}
+					<!-- 버전 명시 비활성화 -->
+					<!-- {$i18n.t('Version')} -->
 				</div>
 			</div>
 			<div class="flex w-full justify-between items-center">
 				<div class="flex flex-col text-xs text-gray-700 dark:text-gray-200">
 					<div class="flex gap-1">
 						<Tooltip content={WEBUI_BUILD_HASH}>
-							v{WEBUI_VERSION}
+							<!-- 버전 명시 비활성화 -->
+							<!-- v{WEBUI_VERSION} -->
 						</Tooltip>
 
 						{#if $config?.features?.enable_version_update_check}
@@ -73,15 +75,15 @@
 							</a>
 						{/if}
 					</div>
-
-					<button
+					<!-- changelog 버튼 비활성화 -->
+					<!-- <button
 						class=" underline flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-500"
 						on:click={() => {
 							showChangelog.set(true);
 						}}
 					>
 						<div>{$i18n.t("See what's new")}</div>
-					</button>
+					</button> -->
 				</div>
 
 				{#if $config?.features?.enable_version_update_check}
@@ -122,7 +124,8 @@
 				<span class=" capitalize">{$config?.license_metadata?.organization_name}</span>
 			</div>
 		{:else}
-			<div class="flex space-x-1">
+			<!-- 외부연결 링크 주석처리 -->
+			<!-- <div class="flex space-x-1">
 				<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
 					<img
 						alt="Discord"
@@ -143,22 +146,41 @@
 						src="https://img.shields.io/github/stars/open-webui/open-webui?style=social&label=Star us on Github"
 					/>
 				</a>
-			</div>
+			</div> -->
 		{/if}
 
+		<!-- 외부 링크 비활성화 -->
 		<div class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+
+			<pre class="text-xs text-gray-400 dark:text-gray-500">
+Shinhan DS AI&DATA Team
+
+The DS Chatbot Platform is an intelligent conversational system that supports free Q&A, document and image uploads, OCR recognition, and more.
+Built on a customized Open WebUI, it provides an intuitive interface that allows users to get fast and accurate answers, improving work efficiency and collaboration.
+
+written by taehee.
+Special thanks to eyjung, wkungh93, yunsu.seok, siri, choicckr, ysevin, huiseon37
+
+</pre>
+
 			Emoji graphics provided by
-			<a href="https://github.com/jdecked/twemoji" target="_blank">Twemoji</a>, licensed under
-			<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC-BY 4.0</a>.
+			<!-- <a href="https://github.com/jdecked/twemoji" target="_blank">Twemoji</a>, licensed under -->
+			<span>Twemoji</span>, licensed under
+			<!-- <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC-BY 4.0</a>. -->
+			<span>CC-BY 4.0</span>.
+
 		</div>
 
 		<div>
-			<pre
+			<!-- <pre
 				class="text-xs text-gray-400 dark:text-gray-500">Copyright (c) {new Date().getFullYear()} <a
 					href="https://openwebui.com"
 					target="_blank"
 					class="underline">Open WebUI (Timothy Jaeryang Baek)</a
-				>
+				> -->
+			<pre
+				class="text-xs text-gray-400 dark:text-gray-500">Copyright (c) {new Date().getFullYear()} <span>
+					Open WebUI (Timothy Jaeryang Baek)</span>
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -196,11 +218,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 		<div class="mt-2 text-xs text-gray-400 dark:text-gray-500">
 			{$i18n.t('Created by')}
-			<a
+			<!-- <a
 				class=" text-gray-500 dark:text-gray-300 font-medium"
 				href="https://github.com/tjbck"
 				target="_blank">Timothy J. Baek</a
-			>
+			> -->
+			<span>Timothy J. Baek</span>
 		</div>
 	</div>
 </div>

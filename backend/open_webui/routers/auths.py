@@ -16,6 +16,7 @@ from open_webui.models.auths import (
     SignupForm,
     UpdatePasswordForm,
     UserResponse,
+    InvalidateSessionsForm,
 )
 from open_webui.models.users import Users, UpdateProfileForm
 from open_webui.models.groups import Groups
@@ -29,11 +30,12 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_GROUPS_HEADER,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
+    WEBUI_AUTH_COOKIE_HTTPONLY,
     WEBUI_AUTH_SIGNOUT_REDIRECT_URL,
     ENABLE_INITIAL_ADMIN_SIGNUP,
     SRC_LOG_LEVELS,
 )
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.responses import RedirectResponse, Response, JSONResponse
 from open_webui.config import OPENID_PROVIDER_URL, ENABLE_OAUTH_SIGNUP, ENABLE_LDAP
 from pydantic import BaseModel
@@ -51,6 +53,14 @@ from open_webui.utils.auth import (
 )
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions
+from open_webui.utils.session_store import (
+    register_session,
+    invalidate_session,
+    invalidate_user_sessions,
+    list_active_sessions,
+    get_client_ip,
+)
+from open_webui.utils.rate_limit import enforce_rate_limit
 
 from typing import Optional, List
 
@@ -110,7 +120,7 @@ async def get_session_user(
                 if expires_at
                 else None
             ),
-            httponly=True,  # Ensures the cookie is not accessible via JavaScript
+            httponly=WEBUI_AUTH_COOKIE_HTTPONLY,
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
         )
@@ -411,7 +421,7 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
                         if expires_at
                         else None
                     ),
-                    httponly=True,  # Ensures the cookie is not accessible via JavaScript
+                    httponly=WEBUI_AUTH_COOKIE_HTTPONLY,
                     samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
                     secure=WEBUI_AUTH_COOKIE_SECURE,
                 )
@@ -463,6 +473,14 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 
 @router.post("/signin", response_model=SessionUserResponse)
 async def signin(request: Request, response: Response, form_data: SigninForm):
+    enforce_rate_limit(
+        identifier=get_client_ip(request),
+        route="api/auths/signin",
+        limit=5,
+        window_seconds=60,
+        detail="Too many sign-in attempts. Please try again later.",
+    )
+
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
@@ -542,7 +560,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             key="token",
             value=token,
             expires=datetime_expires_at,
-            httponly=True,  # Ensures the cookie is not accessible via JavaScript
+            httponly=WEBUI_AUTH_COOKIE_HTTPONLY,
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
         )
@@ -550,6 +568,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         user_permissions = get_permissions(
             user.id, request.app.state.config.USER_PERMISSIONS
         )
+
+        register_session(user.id, token, request)
 
         return {
             "token": token,
@@ -617,6 +637,20 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
             role,
         )
 
+        # Update user info with team, headquarters, division, position if provided
+        if user and (form_data.team or form_data.headquarters or form_data.division or form_data.position):
+            user_info = {}
+            if form_data.team:
+                user_info["team"] = form_data.team
+            if form_data.headquarters:
+                user_info["headquarters"] = form_data.headquarters
+            if form_data.division:
+                user_info["division"] = form_data.division
+            if form_data.position:
+                user_info["position"] = form_data.position
+            
+            Users.update_user_by_id(user.id, {"info": user_info})
+
         if user:
             expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
             expires_at = None
@@ -639,7 +673,7 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
                 key="token",
                 value=token,
                 expires=datetime_expires_at,
-                httponly=True,  # Ensures the cookie is not accessible via JavaScript
+                httponly=WEBUI_AUTH_COOKIE_HTTPONLY,
                 samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
                 secure=WEBUI_AUTH_COOKIE_SECURE,
             )
@@ -659,6 +693,8 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
             user_permissions = get_permissions(
                 user.id, request.app.state.config.USER_PERMISSIONS
             )
+
+            register_session(user.id, token, request)
 
             if not has_users:
                 # Disable signup after the first user is created
@@ -684,6 +720,17 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
 
 @router.get("/signout")
 async def signout(request: Request, response: Response):
+    token = request.cookies.get("token")
+    if token is None:
+        cred = get_http_authorization_cred(request.headers.get("Authorization"))
+        if cred:
+            token = cred.credentials
+
+    if token:
+        data = decode_token(token)
+        if data and data.get("id"):
+            invalidate_session(data["id"], token)
+
     response.delete_cookie("token")
     response.delete_cookie("oui-session")
     response.delete_cookie("oauth_id_token")
@@ -748,6 +795,19 @@ async def signout(request: Request, response: Response):
     )
 
 
+@router.post("/sessions/invalidate", response_model=dict)
+async def invalidate_sessions_request(
+    form: InvalidateSessionsForm, admin=Depends(get_admin_user)
+):
+    revoked = invalidate_user_sessions(form.user_id)
+    return {"revoked": revoked}
+
+
+@router.get("/sessions", response_model=dict)
+async def list_sessions_request(admin=Depends(get_admin_user), user_id: str = Query(...)):
+    return {"sessions": list_active_sessions(user_id)}
+
+
 ############################
 # AddUser
 ############################
@@ -772,6 +832,20 @@ async def add_user(form_data: AddUserForm, user=Depends(get_admin_user)):
             form_data.profile_image_url,
             form_data.role,
         )
+
+        # Update user info with team, headquarters, division, position if provided
+        if user and (form_data.team or form_data.headquarters or form_data.division or form_data.position):
+            user_info = {}
+            if form_data.team:
+                user_info["team"] = form_data.team
+            if form_data.headquarters:
+                user_info["headquarters"] = form_data.headquarters
+            if form_data.division:
+                user_info["division"] = form_data.division
+            if form_data.position:
+                user_info["position"] = form_data.position
+            
+            Users.update_user_by_id(user.id, {"info": user_info})
 
         if user:
             token = create_token(data={"id": user.id})

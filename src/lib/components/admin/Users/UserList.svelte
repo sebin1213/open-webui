@@ -12,7 +12,7 @@
 
 	import { toast } from 'svelte-sonner';
 
-	import { updateUserRole, getUsers, deleteUserById } from '$lib/apis/users';
+	import { updateUserRole, getUsers, deleteUserById, exportUsersToExcel } from '$lib/apis/users';
 
 	import Pagination from '$lib/components/common/Pagination.svelte';
 	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte';
@@ -103,6 +103,15 @@
 	$: if (query !== null && orderBy && direction) {
 		getUserList();
 	}
+
+	const exportUsers = async () => {
+		try {
+			await exportUsersToExcel(localStorage.token);
+			toast.success('사용자 목록이 Excel 파일로 다운로드되었습니다.');
+		} catch (error) {
+			toast.error(`Excel 다운로드 실패: ${error}`);
+		}
+	};
 </script>
 
 <ConfirmDialog
@@ -201,7 +210,18 @@
 					/>
 				</div>
 
-				<div>
+				<div class="flex gap-1">
+					<Tooltip content={$i18n.t('Export Users')}>
+						<button
+							class=" p-2 rounded-xl hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-850 transition font-medium text-sm flex items-center space-x-1"
+							on:click={exportUsers}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-3.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+							</svg>
+						</button>
+					</Tooltip>
+
 					<Tooltip content={$i18n.t('Add User')}>
 						<button
 							class=" p-2 rounded-xl hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-850 transition font-medium text-sm flex items-center space-x-1"
@@ -291,6 +311,22 @@
 						</div>
 					</th>
 
+					<th scope="col" class="px-3 py-1.5">
+						소속
+					</th>
+
+					<th scope="col" class="px-3 py-1.5">
+						본부
+					</th>
+
+					<th scope="col" class="px-3 py-1.5">
+						부문
+					</th>
+
+					<th scope="col" class="px-3 py-1.5">
+						직급(직책)
+					</th>
+
 					<th
 						scope="col"
 						class="px-2.5 py-2 cursor-pointer select-none"
@@ -373,6 +409,11 @@
 							</div>
 						</td>
 						<td class=" px-3 py-1"> {user.email} </td>
+
+						<td class=" px-3 py-1"> {user.info?.team ?? ''} </td>
+						<td class=" px-3 py-1"> {user.info?.headquarters ?? ''} </td>
+						<td class=" px-3 py-1"> {user.info?.division ?? ''} </td>
+						<td class=" px-3 py-1"> {user.info?.position ?? ''} </td>
 
 						<td class=" px-3 py-1">
 							{dayjs(user.last_active_at * 1000).fromNow()}
