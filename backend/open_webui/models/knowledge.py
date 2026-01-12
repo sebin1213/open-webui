@@ -237,5 +237,82 @@ class KnowledgeTable:
             except Exception:
                 return False
 
+    def cleanup_knowledge_by_file_ids(self, file_ids: list[str]) -> dict:
+        """파일 ID 목록에 기반해 Knowledge 레코드 정리"""
+        cleaned_knowledge = []
+        deleted_knowledge = []
+        failed_knowledge = []
+
+        try:
+            with get_db() as db:
+                # 해당 파일들을 참조하는 Knowledge 레코드들 찾기
+                knowledge_records = db.query(Knowledge).all()
+
+                for knowledge in knowledge_records:
+                    try:
+                        if knowledge.data and "file_ids" in knowledge.data:
+                            original_file_ids = knowledge.data.get("file_ids", [])
+
+                            # 삭제된 파일 ID들 제거
+                            remaining_file_ids = [fid for fid in original_file_ids if fid not in file_ids]
+
+                            if len(remaining_file_ids) != len(original_file_ids):
+                                # 변경이 있었다면
+                                if not remaining_file_ids:
+                                    # 모든 파일이 삭제되었으면 Knowledge 자체 삭제
+                                    db.delete(knowledge)
+                                    deleted_knowledge.append({
+                                        "id": knowledge.id,
+                                        "name": knowledge.name,
+                                        "reason": "No remaining file references"
+                                    })
+                                else:
+                                    # 일부 파일만 삭제되었으면 업데이트
+                                    knowledge.data["file_ids"] = remaining_file_ids
+                                    knowledge.updated_at = int(time.time())
+                                    cleaned_knowledge.append({
+                                        "id": knowledge.id,
+                                        "name": knowledge.name,
+                                        "removed_files": len(original_file_ids) - len(remaining_file_ids),
+                                        "remaining_files": len(remaining_file_ids)
+                                    })
+                    except Exception as e:
+                        failed_knowledge.append({
+                            "id": knowledge.id if hasattr(knowledge, 'id') else "unknown",
+                            "name": knowledge.name if hasattr(knowledge, 'name') else "unknown",
+                            "error": str(e)
+                        })
+
+                db.commit()
+
+            return {
+                "cleaned_knowledge": cleaned_knowledge,
+                "deleted_knowledge": deleted_knowledge,
+                "failed_knowledge": failed_knowledge,
+                "total_cleaned": len(cleaned_knowledge),
+                "total_deleted": len(deleted_knowledge)
+            }
+
+        except Exception as e:
+            log.error(f"Error in cleanup_knowledge_by_file_ids: {e}")
+            return {
+                "cleaned_knowledge": [],
+                "deleted_knowledge": [],
+                "failed_knowledge": [],
+                "total_cleaned": 0,
+                "total_deleted": 0,
+                "error": str(e)
+            }
+
+    def get_knowledge_by_timestamp(self, cutoff_timestamp: int) -> list[KnowledgeModel]:
+        """타임스탬프 기준으로 Knowledge 조회"""
+        try:
+            with get_db() as db:
+                knowledge_records = db.query(Knowledge).filter(Knowledge.created_at < cutoff_timestamp).all()
+                return [KnowledgeModel.model_validate(knowledge) for knowledge in knowledge_records]
+        except Exception as e:
+            log.error(f"Error getting knowledge by timestamp: {e}")
+            return []
+
 
 Knowledges = KnowledgeTable()

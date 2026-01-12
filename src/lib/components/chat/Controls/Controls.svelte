@@ -64,11 +64,12 @@
 			{/if}
 
 			{#if $user?.role === 'admin' || ($user?.permissions.chat?.valves ?? true)}
-				<Collapsible bind:open={showValves} title={$i18n.t('Valves')} buttonClassName="w-full">
+				<!-- 사용자 밸브 설정 비활성화 -->
+		<!-- <Collapsible bind:open={showValves} title={$i18n.t('Valves')} buttonClassName="w-full">
 					<div class="text-sm" slot="content">
 						<Valves show={showValves} />
 					</div>
-				</Collapsible>
+				</Collapsible> -->
 
 				<hr class="my-2 border-gray-50 dark:border-gray-700/10" />
 			{/if}

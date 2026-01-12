@@ -15,6 +15,7 @@
 	} from '$lib/stores';
 	import FloatingButtons from '../ContentRenderer/FloatingButtons.svelte';
 	import { createMessagesList } from '$lib/utils';
+	import Modal from './Markdown/Modal.svelte'; // 모달 창 추가
 
 	export let id;
 	export let content;
@@ -42,6 +43,10 @@
 
 	let contentContainerElement;
 	let floatingButtonsElement;
+
+	// 모달 상태 추가
+	let isModalOpen = false;
+	let modalUrl = '';
 
 	const updateButtonPosition = (event) => {
 		const buttonsContainerElement = document.getElementById(`floating-buttons-${id}`);
@@ -131,6 +136,13 @@
 			document.removeEventListener('keydown', keydownHandler);
 		}
 	});
+
+	// 모달 링크 클릭 이벤트
+	const handleLinkClick = (url) => {
+		modalUrl = url;
+		isModalOpen = true;
+		onSourceClick(url); // Ensure the export property is utilized
+	};
 </script>
 
 <div bind:this={contentContainerElement}>
@@ -173,7 +185,7 @@
 			// remove duplicates
 			return acc.filter((item, index) => acc.indexOf(item) === index);
 		}, [])}
-		{onSourceClick}
+		onSourceClick={(url) => handleLinkClick(url)}
 		{onTaskClick}
 		{onSave}
 		onUpdate={async (token) => {
@@ -200,6 +212,9 @@
 		}}
 	/>
 </div>
+
+<!-- 모달 창 추가 -->
+<Modal isOpen={isModalOpen} url={modalUrl} on:close={() => (isModalOpen = false)} />
 
 {#if floatingButtons && model}
 	<FloatingButtons

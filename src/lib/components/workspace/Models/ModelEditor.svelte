@@ -68,7 +68,7 @@
 		base_model_id: null,
 		name: '',
 		meta: {
-			profile_image_url: `${WEBUI_BASE_URL}/static/favicon.png`,
+			profile_image_url: `${WEBUI_BASE_URL}/static/favicon-shinhan.png`,
 			description: '',
 			suggestion_prompts: null,
 			tags: []
@@ -89,14 +89,14 @@
 	let defaultFilterIds = [];
 
 	let capabilities = {
-		vision: true,
-		file_upload: true,
-		web_search: true,
-		image_generation: true,
-		code_interpreter: true,
-		citations: true,
+		vision: false,
+		file_upload: false,
+		web_search: false,
+		image_generation: false,
+		code_interpreter: false,
+		citations: false,
 		status_updates: true,
-		usage: undefined
+		usage: false
 	};
 	let defaultFeatureIds = [];
 
@@ -421,7 +421,7 @@
 					<div class="self-center">
 						<button
 							class="rounded-xl flex shrink-0 items-center {info.meta.profile_image_url !==
-							`${WEBUI_BASE_URL}/static/favicon.png`
+							`${WEBUI_BASE_URL}/static/favicon-shinhan.png`
 								? 'bg-transparent'
 								: 'bg-white'} shadow-xl group relative"
 							type="button"
@@ -437,7 +437,7 @@
 								/>
 							{:else}
 								<img
-									src="{WEBUI_BASE_URL}/static/favicon.png"
+									src="{WEBUI_BASE_URL}/static/favicon-shinhan.png"
 									alt="model profile"
 									class=" rounded-xl size-72 md:size-60 object-cover shrink-0"
 								/>
@@ -473,7 +473,7 @@
 							<button
 								class="px-2 py-1 text-gray-500 rounded-lg text-xs"
 								on:click={() => {
-									info.meta.profile_image_url = `${WEBUI_BASE_URL}/static/favicon.png`;
+									info.meta.profile_image_url = `${WEBUI_BASE_URL}/static/favicon-shinhan.png`;
 								}}
 								type="button"
 							>

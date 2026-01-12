@@ -21,9 +21,9 @@
 	let filesInputElement;
 
 	// Addons
-	let titleAutoGenerate = true;
-	let autoFollowUps = true;
-	let autoTags = true;
+	let titleAutoGenerate = false;
+	let autoFollowUps = false;
+	let autoTags = false;
 
 	let responseAutoCopy = false;
 	let widescreenMode = false;
@@ -121,12 +121,56 @@
 	};
 
 	const toggleTitleAutoGenerate = async () => {
+		// titleAutoGenerate = !titleAutoGenerate;
+		titleAutoGenerate = false;
 		saveSettings({
 			title: {
 				...$settings.title,
 				auto: titleAutoGenerate
 			}
 		});
+	};
+
+	const toggleAutoFollowUps = async () => {
+		// autoFollowUps = !autoFollowUps;
+		autoFollowUps = false;
+		saveSettings({ autoFollowUps });
+	};
+
+	const toggleAutoTags = async () => {
+		// autoTags = !autoTags;
+		autoTags = false;
+		saveSettings({ autoTags });
+	};
+
+	const toggleDetectArtifacts = async () => {
+		detectArtifacts = !detectArtifacts;
+		saveSettings({ detectArtifacts });
+	};
+
+	const toggleRichTextInput = async () => {
+		richTextInput = !richTextInput;
+		saveSettings({ richTextInput });
+	};
+
+	const toggleInsertPromptAsRichText = async () => {
+		insertPromptAsRichText = !insertPromptAsRichText;
+		saveSettings({ insertPromptAsRichText });
+	};
+
+	const toggleKeepFollowUpPrompts = async () => {
+		keepFollowUpPrompts = !keepFollowUpPrompts;
+		saveSettings({ keepFollowUpPrompts });
+	};
+
+	const toggleInsertFollowUpPrompt = async () => {
+		insertFollowUpPrompt = !insertFollowUpPrompt;
+		saveSettings({ insertFollowUpPrompt });
+	};
+
+	const toggleLargeTextAsFile = async () => {
+		largeTextAsFile = !largeTextAsFile;
+		saveSettings({ largeTextAsFile });
 	};
 
 	const toggleResponseAutoCopy = async () => {
@@ -180,9 +224,9 @@
 	};
 
 	onMount(async () => {
-		titleAutoGenerate = $settings?.title?.auto ?? true;
-		autoTags = $settings?.autoTags ?? true;
-		autoFollowUps = $settings?.autoFollowUps ?? true;
+		titleAutoGenerate = $settings?.title?.auto ?? false; // 기본값 변경
+		autoTags = $settings?.autoTags ?? false; // 기본값 변경
+		autoFollowUps = $settings?.autoFollowUps ?? false; // 기본값 변경
 
 		highContrastMode = $settings?.highContrastMode ?? false;
 

@@ -290,9 +290,25 @@ export const userSignUp = async (
 	name: string,
 	email: string,
 	password: string,
-	profile_image_url: string
+	profile_image_url: string,
+	team?: string,
+	headquarters?: string,
+	division?: string,
+	position?: string
 ) => {
 	let error = null;
+
+	const requestBody: any = {
+		name: name,
+		email: email,
+		password: password,
+		profile_image_url: profile_image_url
+	};
+
+	if (team) requestBody.team = team;
+	if (headquarters) requestBody.headquarters = headquarters;
+	if (division) requestBody.division = division;
+	if (position) requestBody.position = position;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/signup`, {
 		method: 'POST',
@@ -300,12 +316,7 @@ export const userSignUp = async (
 			'Content-Type': 'application/json'
 		},
 		credentials: 'include',
-		body: JSON.stringify({
-			name: name,
-			email: email,
-			password: password,
-			profile_image_url: profile_image_url
-		})
+		body: JSON.stringify(requestBody)
 	})
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
@@ -353,29 +364,37 @@ export const userSignOut = async () => {
 };
 
 export const addUser = async (
-	token: string,
-	name: string,
-	email: string,
-	password: string,
-	role: string = 'pending',
-	profile_image_url: null | string = null
+    token: string,
+    name: string,
+    email: string,
+    password: string,
+    role: string = 'pending',
+    profile_image_url: null | string = null,
+    team?: string,
+    headquarters?: string,
+    division?: string,
+    position?: string
 ) => {
 	let error = null;
 
-	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/add`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			...(token && { authorization: `Bearer ${token}` })
-		},
-		body: JSON.stringify({
-			name: name,
-			email: email,
-			password: password,
-			role: role,
-			...(profile_image_url && { profile_image_url: profile_image_url })
-		})
-	})
+    const res = await fetch(`${WEBUI_API_BASE_URL}/auths/add`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token && { authorization: `Bearer ${token}` })
+        },
+        body: JSON.stringify({
+            name: name,
+            email: email,
+            password: password,
+            role: role,
+            ...(profile_image_url && { profile_image_url: profile_image_url }),
+            ...(team ? { team } : {}),
+            ...(headquarters ? { headquarters } : {}),
+            ...(division ? { division } : {}),
+            ...(position ? { position } : {})
+        })
+    })
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
 			return res.json();

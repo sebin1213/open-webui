@@ -265,7 +265,10 @@ class Loader:
                 url=self.kwargs.get("EXTERNAL_DOCUMENT_LOADER_URL"),
                 api_key=self.kwargs.get("EXTERNAL_DOCUMENT_LOADER_API_KEY"),
                 mime_type=file_content_type,
+
                 user=self.user,
+                enable_pdf_conversion=self.kwargs.get("EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION", True),
+                gotenberg_url=self.kwargs.get("EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL"),
             )
         elif self.engine == "tika" and self.kwargs.get("TIKA_SERVER_URL"):
             if self._is_text_file(file_ext, file_content_type):

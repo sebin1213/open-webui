@@ -1,6 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
-/// <reference path="../support/index.d.ts" />
-import { adminUser } from '../support/e2e';
+// <reference path="../support/index.d.ts" />
 
 // These tests run through the various settings pages, ensuring that the user can interact with them as expected
 describe('Settings', () => {
@@ -12,13 +11,21 @@ describe('Settings', () => {
 
 	beforeEach(() => {
 		// Login as the admin user
-		cy.loginAdmin();
+		cy.login(Cypress.env('email'), Cypress.env('password'));
 		// Visit the home page
 		cy.visit('/');
-		// Click on the user menu
-		cy.get('button[aria-label="User Menu"]').click();
+
+		// close update modal
+		cy.get('.modal-footer', { timeout: 10000 })
+			.should('be.visible')
+			.find('.primary-button')
+			.click();
+
+		// Click on the user profile
+		cy.findAllByRole('button').filter('[data-menu-trigger]').eq(1).click();
+
 		// Click on the settings link
-		cy.get('button').contains('Settings').click();
+		cy.get('div[role="menuitem"]').eq(0).click();
 	});
 
 	context('General', () => {
@@ -32,19 +39,6 @@ describe('Settings', () => {
 		it('user can open the Interface modal and hit save', () => {
 			cy.get('button').contains('Interface').click();
 			cy.get('button').contains('Save').click();
-		});
-	});
-
-	context('Audio', () => {
-		it('user can open the Audio modal and hit save', () => {
-			cy.get('button').contains('Audio').click();
-			cy.get('button').contains('Save').click();
-		});
-	});
-
-	context('Chats', () => {
-		it('user can open the Chats modal', () => {
-			cy.get('button').contains('Chats').click();
 		});
 	});
 

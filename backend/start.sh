@@ -70,18 +70,24 @@ if [ -n "$SPACE_ID" ]; then
 fi
 
 PYTHON_CMD=$(command -v python3 || command -v python)
-UVICORN_WORKERS="${UVICORN_WORKERS:-1}"
 
-# If script is called with arguments, use them; otherwise use default workers
-if [ "$#" -gt 0 ]; then
-    ARGS=("$@")
+USE_GUNICORN=${USE_GUNICORN:-false}
+APP_REQUEST_TIMEOUT_SECONDS=${APP_REQUEST_TIMEOUT_SECONDS:-180}
+
+if [[ "${USE_GUNICORN,,}" == "true" ]]; then
+  # 운영 적용 시 예: GUNICORN_BIND="unix:/tmp/open-webui.sock"
+  GUNICORN_BIND=${GUNICORN_BIND:-${HOST:-0.0.0.0}:${PORT:-8080}}
+  GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-$APP_REQUEST_TIMEOUT_SECONDS}
+  WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec gunicorn open_webui.main:app \
+    -k uvicorn.workers.UvicornWorker \
+    --bind "$GUNICORN_BIND" \
+    --workers "${GUNICORN_WORKERS:-1}" \
+    --timeout "$GUNICORN_TIMEOUT" \
+    --keep-alive "${GUNICORN_KEEP_ALIVE:-10}" \
+    --graceful-timeout "${GUNICORN_GRACEFUL_TIMEOUT:-30}" \
+    --access-logfile - \
+    --access-logformat '%(h)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" pid=%(p)s' \
+    --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}"
 else
-    ARGS=(--workers "$UVICORN_WORKERS")
+  WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app --host "$HOST" --port "$PORT" --forwarded-allow-ips '*' --workers "${UVICORN_WORKERS:-1}" --timeout-keep-alive "$APP_REQUEST_TIMEOUT_SECONDS"
 fi
-
-# Run uvicorn
-WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app \
-    --host "$HOST" \
-    --port "$PORT" \
-    --forwarded-allow-ips '*' \
-    "${ARGS[@]}"

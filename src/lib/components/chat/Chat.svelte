@@ -41,6 +41,7 @@
 		toolServers,
 		functions,
 		selectedFolder,
+		showNewChatGuide,
 		pinnedChats,
 		showEmbeds
 	} from '$lib/stores';
@@ -93,6 +94,7 @@
 	import Placeholder from './Placeholder.svelte';
 	import NotificationToast from '../NotificationToast.svelte';
 	import Spinner from '../common/Spinner.svelte';
+	import NewChatGuideModal from './NewChatGuideModal.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 	import Image from '../common/Image.svelte';
@@ -155,6 +157,15 @@
 	let files = [];
 	let params = {};
 
+	// chatIdProp 변경 시 가이드 숨김 (채팅 로드와 독립적)
+	let previousChatIdProp = chatIdProp;
+	$: if (chatIdProp !== previousChatIdProp) {
+		previousChatIdProp = chatIdProp;
+		// 채팅방 이동 시 가이드 숨김 (깜빡임 방지)
+		showNewChatGuide.set(false);
+	}
+
+	// 채팅 로드 로직 (기존 방식 복구)
 	$: if (chatIdProp) {
 		navigateHandler();
 	}
@@ -453,6 +464,42 @@
 					} catch (error) {
 						console.error('Error executing code:', error);
 					}
+				} else if (type === 'function_exception') {
+					// 함수 실행 에러 처리 - 에러 토스트 메시지 표시
+					const errorMessage = data?.message || data?.error || '함수 예외 발생';
+					toast.error(errorMessage);
+					console.error('Function Exception:', data);
+				} else if (type === 'document_generation') {
+					// 생성 파일 자동 다운로드
+					const fileName = data.name;
+					const contentType = data.content_type;
+					
+					try {
+						// 순수 base64 처리
+						const binaryString = atob(data.content);
+						const bytes = new Uint8Array(binaryString.length);
+						for (let i = 0; i < binaryString.length; i++) {
+							bytes[i] = binaryString.charCodeAt(i);
+						}
+						const blob = new Blob([bytes], { type: contentType });
+						
+						// 다운로드 링크 생성 및 자동 클릭
+						const url = URL.createObjectURL(blob);
+						const a = document.createElement('a');
+						a.href = url;
+						a.download = fileName;
+						document.body.appendChild(a);
+						a.click();
+						document.body.removeChild(a);
+						URL.revokeObjectURL(url);
+						
+						// 성공 토스트 메시지 표시
+						toast.success(`${fileName} 다운로드가 시작되었습니다.`);
+						
+					} catch (error) {
+						console.error('파일 다운로드 오류:', error);
+						toast.error('파일 다운로드 중 오류가 발생했습니다.');
+					}
 				} else if (type === 'input') {
 					eventCallback = cb;
 
@@ -511,6 +558,41 @@
 		}
 	};
 
+	// 가이드 표시 조건 확인 함수 (간소화)
+	const checkGuideDisplay = (isFirstVisit = false, isNewChatButton = false) => {
+		const guidePreference = localStorage.getItem('newChatGuidePreference');
+		const hideUntil = localStorage.getItem('newChatGuideHideUntil');
+		const hasEverVisited = localStorage.getItem('hasEverVisited');
+		const now = new Date().getTime();
+		
+		let shouldShowGuide = false;
+		
+		// 영구적으로 숨김 설정이면 표시하지 않음
+		if (guidePreference === 'never') {
+			shouldShowGuide = false;
+		} 
+		// 하루동안 숨김 설정이 유효하면 표시하지 않음
+		else if (guidePreference === 'today' && hideUntil) {
+			const hideUntilTime = parseInt(hideUntil);
+			if (now < hideUntilTime) {
+				shouldShowGuide = false;
+			} else {
+				// 시간이 지났으면 최초 접속이나 새 채팅 버튼에서만 표시
+				shouldShowGuide = (isFirstVisit && !hasEverVisited) || isNewChatButton;
+			}
+		}
+		// 최초 접속이거나 새 채팅 버튼인 경우에만 표시
+		else {
+			shouldShowGuide = (isFirstVisit && !hasEverVisited) || isNewChatButton;
+		}
+		
+		if (shouldShowGuide) {
+			showNewChatGuide.set(true);
+		} else {
+			showNewChatGuide.set(false);
+		}
+	};
+
 	const savedModelIds = async () => {
 		if (
 			$selectedFolder &&
@@ -546,7 +628,19 @@
 		window.addEventListener('message', onMessageHandler);
 		$socket?.on('events', chatEventHandler);
 
+
 		audioQueue.set(new AudioQueue(document.getElementById('audioElement')));
+		// 첫 접속 여부 확인 (localStorage 기준)
+		const hasEverVisited = localStorage.getItem('hasEverVisited');
+		const isFirstVisit = !hasEverVisited;
+		
+		// 가이드 모달 표시 조건 확인
+		checkGuideDisplay(isFirstVisit);
+		
+		// 방문 기록 저장
+		if (isFirstVisit) {
+			localStorage.setItem('hasEverVisited', 'true');
+		}
 
 		pageSubscribe = page.subscribe(async (p) => {
 			if (p.url.pathname === '/') {
@@ -901,6 +995,10 @@
 		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
 			await temporaryChatEnabled.set(true);
 		}
+		
+		// 새 채팅 버튼으로 시작된 경우 가이드 표시
+		await tick();
+		checkGuideDisplay(false, true);
 
 		if ($settings?.temporaryChatByDefault ?? false) {
 			if ($temporaryChatEnabled === false) {
@@ -1902,7 +2000,9 @@
 									text: message?.merged?.content ?? message.content
 								},
 								...message.files
-									.filter((file) => file.type === 'image')
+									// 기존 코드: .filter((file) => file.type === 'image')
+									// 수정된 코드: external loader로 처리되지 않은 이미지만 필터링
+									.filter((file) => file.type === 'image' && !file.processed_as_document)
 									.map((file) => ({
 										type: 'image_url',
 										image_url: {
@@ -1976,11 +2076,11 @@
 							messages.at(1)?.role === 'user')) &&
 					(selectedModels[0] === model.id || atSelectedModel !== undefined)
 						? {
-								title_generation: $settings?.title?.auto ?? true,
-								tags_generation: $settings?.autoTags ?? true
+								title_generation: $settings?.title?.auto ?? false, // 기본값 변경
+								tags_generation: $settings?.autoTags ?? false // 기본값 변경
 							}
 						: {}),
-					follow_up_generation: $settings?.autoFollowUps ?? true
+					follow_up_generation: $settings?.autoFollowUps ?? false // 기본값 변경
 				},
 
 				...(stream && (model.info?.meta?.capabilities?.usage ?? false)
@@ -2385,14 +2485,14 @@
 />
 
 <div
-	class="h-screen max-h-[100dvh] transition-width duration-200 ease-in-out {$showSidebar
+	class="relative isolate h-screen max-h-[100dvh] transition-width duration-200 ease-in-out {$showSidebar
 		? '  md:max-w-[calc(100%-260px)]'
 		: ' '} w-full max-w-full flex flex-col"
 	id="chat-container"
 >
 	{#if !loading}
 		<div in:fade={{ duration: 50 }} class="w-full h-full flex flex-col">
-			{#if $selectedFolder && $selectedFolder?.meta?.background_image_url}
+			<!-- {#if $selectedFolder && $selectedFolder?.meta?.background_image_url}
 				<div
 					class="absolute {$showSidebar
 						? 'md:max-w-[calc(100%-260px)] md:translate-x-[260px]'
@@ -2407,7 +2507,7 @@
 				<div
 					class="absolute {$showSidebar
 						? 'md:max-w-[calc(100%-260px)] md:translate-x-[260px]'
-						: ''} top-0 left-0 w-full h-full bg-cover bg-center bg-no-repeat"
+						: ''} top-0 left-0 w-full h-full bg-cover bg-no-repeat"
 					style="background-image: url({$settings?.backgroundImageUrl ??
 						$config?.license_metadata?.background_image_url})  "
 				/>
@@ -2415,7 +2515,11 @@
 				<div
 					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
 				/>
-			{/if}
+			{/if} -->
+			<div
+				class="absolute inset-0 bg-cover bg-no-repeat bg-center -z-10 pointer-events-none"
+				style={`background-image: url(${($settings?.backgroundImageUrl) || '/static/background_default_trans_90.png'})`}
+			/>
 
 			<PaneGroup direction="horizontal" class="w-full h-full">
 				<Pane defaultSize={50} minSize={30} class="h-full flex relative max-w-full flex-col">
@@ -2516,6 +2620,9 @@
 							</div>
 
 							<div class=" pb-2 z-10">
+								<div class="text-xs text-gray-500 text-center">
+									AI는 실수를 할 수 있습니다. 중요한 정보는 재차 확인하세요.
+								</div>
 								<MessageInput
 									bind:this={messageInput}
 									{history}
@@ -2560,12 +2667,6 @@
 										}
 									}}
 								/>
-
-								<div
-									class="absolute bottom-1 text-xs text-gray-500 text-center line-clamp-1 right-0 left-0"
-								>
-									<!-- {$i18n.t('LLMs can make mistakes. Verify important information.')} -->
-								</div>
 							</div>
 						{:else}
 							<div class="flex items-center h-full">
@@ -2646,9 +2747,11 @@
 	{/if}
 </div>
 
+
 <style>
 	::-webkit-scrollbar {
 		height: 0.5rem;
 		width: 0.5rem;
 	}
 </style>
+<NewChatGuideModal bind:show={$showNewChatGuide} />

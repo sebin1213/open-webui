@@ -35,6 +35,7 @@ from open_webui.env import (
     SRC_LOG_LEVELS,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
 )
+from open_webui.utils.session_store import validate_and_refresh_session
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -282,6 +283,12 @@ def get_current_user(
                     detail=ERROR_MESSAGES.INVALID_TOKEN,
                 )
             else:
+                if not validate_and_refresh_session(user.id, token, request):
+                    response.delete_cookie("token")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=ERROR_MESSAGES.INVALID_TOKEN,
+                    )
                 if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
                     trusted_email = request.headers.get(
                         WEBUI_AUTH_TRUSTED_EMAIL_HEADER, ""

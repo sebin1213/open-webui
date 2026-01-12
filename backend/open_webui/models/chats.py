@@ -1,5 +1,4 @@
 import logging
-import json
 import time
 import uuid
 from typing import Optional
@@ -123,6 +122,127 @@ class ChatTitleIdResponse(BaseModel):
 
 
 class ChatTable:
+    def get_message_counts_by_user_in_timerange(self, start_ts: int, end_ts: int) -> list[tuple[str, int]]:
+        """
+        Returns a list of (user_id, message_count) for messages with role='user'
+        whose message timestamp (seconds) is within [start_ts, end_ts).
+
+        This scans the chat.chat JSON to count messages. Prefilters by chat.updated_at
+        where possible to reduce workload. Only DB querying; no date parsing here.
+        """
+        results: list[tuple[str, int]] = []
+        with get_db() as db:
+            dialect_name = db.bind.dialect.name
+            if dialect_name == "sqlite":
+                query = text(
+                    """
+                    SELECT c.user_id AS user_id, COUNT(*) AS message_count
+                    FROM chat c,
+                         json_each(c.chat, '$.history.messages') AS msg
+                    WHERE c.updated_at >= :start_ts
+                      AND json_extract(msg.value, '$.role') = 'user'
+                      AND json_extract(msg.value, '$.timestamp') >= :start_ts
+                      AND json_extract(msg.value, '$.timestamp') < :end_ts
+                    GROUP BY c.user_id
+                    """
+                )
+                rows = db.execute(query, {"start_ts": start_ts, "end_ts": end_ts}).fetchall()
+                results = [(row[0], int(row[1])) for row in rows]
+            elif dialect_name == "postgresql":
+                query = text(
+                    """
+                    SELECT c.user_id AS user_id, COUNT(*) AS message_count
+                    FROM chat c,
+                         json_each(c.chat->'history'->'messages') AS msg
+                    WHERE c.updated_at >= :start_ts
+                      AND msg.value->>'role' = 'user'
+                      AND (msg.value->>'timestamp')::bigint >= :start_ts
+                      AND (msg.value->>'timestamp')::bigint < :end_ts
+                    GROUP BY c.user_id
+                    """
+                )
+                rows = db.execute(query, {"start_ts": start_ts, "end_ts": end_ts}).fetchall()
+                results = [(row[0], int(row[1])) for row in rows]
+            else:
+                # Fallback: limited Python-side scan per user
+                # Use distinct user_ids from Chat to avoid circular import with User
+                all_user_ids = [row[0] for row in db.query(Chat.user_id).distinct().all()]
+                for uid in all_user_ids:
+                    extended_start = start_ts - (30 * 24 * 60 * 60)
+                    user_chats = (
+                        db.query(Chat.chat)
+                        .filter(and_(Chat.user_id == uid, Chat.updated_at >= extended_start))
+                        .all()
+                    )
+                    cnt = 0
+                    for chat_row in user_chats:
+                        chat_data = chat_row[0]
+                        if chat_data and isinstance(chat_data, dict):
+                            messages = chat_data.get("history", {}).get("messages", {})
+                            if isinstance(messages, dict):
+                                for msg in messages.values():
+                                    if (
+                                        isinstance(msg, dict)
+                                        and msg.get("role") == "user"
+                                        and msg.get("timestamp")
+                                    ):
+                                        ts = int(msg.get("timestamp"))
+                                        if start_ts <= ts < end_ts:
+                                            cnt += 1
+                    results.append((uid, cnt))
+
+        return results
+
+    def get_message_counts_by_user_and_date_in_timerange(self, start_ts: int, end_ts: int) -> list[tuple[str, str, int]]:
+        """
+        Returns a list of (user_id, date_str, count) where date_str is 'YYYY-MM-DD'.
+        Counts messages with role='user' whose timestamp is within [start_ts, end_ts).
+        """
+        out: list[tuple[str, str, int]] = []
+        with get_db() as db:
+            dialect_name = db.bind.dialect.name
+            if dialect_name == "sqlite":
+                query = text(
+                    """
+                    SELECT c.user_id AS user_id,
+                           date(json_extract(msg.value, '$.timestamp'), 'unixepoch') AS day,
+                           COUNT(*) AS cnt
+                    FROM chat c,
+                         json_each(c.chat, '$.history.messages') AS msg
+                    WHERE c.updated_at >= :start_ts
+                      AND json_extract(msg.value, '$.role') = 'user'
+                      AND json_extract(msg.value, '$.timestamp') >= :start_ts
+                      AND json_extract(msg.value, '$.timestamp') < :end_ts
+                    GROUP BY c.user_id, day
+                    ORDER BY day ASC
+                    """
+                )
+                rows = db.execute(query, {"start_ts": start_ts, "end_ts": end_ts}).fetchall()
+                out = [(row[0], row[1], int(row[2])) for row in rows]
+            elif dialect_name == "postgresql":
+                query = text(
+                    """
+                    SELECT c.user_id AS user_id,
+                           to_timestamp((msg.value->>'timestamp')::bigint)::date AS day,
+                           COUNT(*) AS cnt
+                    FROM chat c,
+                         json_each(c.chat->'history'->'messages') AS msg
+                    WHERE c.updated_at >= :start_ts
+                      AND msg.value->>'role' = 'user'
+                      AND (msg.value->>'timestamp')::bigint >= :start_ts
+                      AND (msg.value->>'timestamp')::bigint < :end_ts
+                    GROUP BY c.user_id, day
+                    ORDER BY day ASC
+                    """
+                )
+                rows = db.execute(query, {"start_ts": start_ts, "end_ts": end_ts}).fetchall()
+                out = [(row[0], str(row[1]), int(row[2])) for row in rows]
+            else:
+                # Fallback: derive per day from Python loop using get_message_counts_by_user_in_timerange not efficient
+                pass
+
+        return out
+
     def insert_new_chat(self, user_id: str, form_data: ChatForm) -> Optional[ChatModel]:
         with get_db() as db:
             id = str(uuid.uuid4())
@@ -1071,6 +1191,7 @@ class ChatTable:
                 return True
         except Exception:
             return False
+
 
 
 Chats = ChatTable()

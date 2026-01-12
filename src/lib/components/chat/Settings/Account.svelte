@@ -4,6 +4,7 @@
 
 	import { user, config, settings } from '$lib/stores';
 	import { updateUserProfile, createAPIKey, getAPIKey, getSessionUser } from '$lib/apis/auths';
+	import { updateUserInfo, getUserInfo } from '$lib/apis/users';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	import UpdatePassword from './Account/UpdatePassword.svelte';
@@ -27,6 +28,10 @@
 
 	let profileImageUrl = '';
 	let name = '';
+	let team = '';
+	let headquarters = '';
+	let division = '';
+	let position = '';
 	let bio = '';
 
 	let _gender = '';
@@ -43,6 +48,24 @@
 	let profileImageInputElement: HTMLInputElement;
 
 	const submitHandler = async () => {
+		// Validate required organization fields
+		if (!team?.trim()) {
+			toast.error('소속을 입력해주세요.');
+			return false;
+		}
+		if (!headquarters?.trim()) {
+			toast.error('본부를 입력해주세요.');
+			return false;
+		}
+		if (!division?.trim()) {
+			toast.error('부문을 입력해주세요.');
+			return false;
+		}
+		if (!position?.trim()) {
+			toast.error('직급(직책)을 입력해주세요.');
+			return false;
+		}
+
 		if (name !== $user?.name) {
 			if (profileImageUrl === generateInitialsImage($user?.name) || profileImageUrl === '') {
 				profileImageUrl = generateInitialsImage(name);
@@ -58,6 +81,7 @@
 			});
 		}
 
+		// Update user profile (name and image)
 		const updatedUser = await updateUserProfile(localStorage.token, {
 			name: name,
 			profile_image_url: profileImageUrl,
@@ -66,6 +90,16 @@
 			date_of_birth: dateOfBirth ? dateOfBirth : null
 		}).catch((error) => {
 			toast.error(`${error}`);
+				return null;
+			}
+		);
+
+		// Update user info (team, headquarters, division, position)
+		const userInfo = { team, headquarters, division, position };
+		const updatedInfo = await updateUserInfo(localStorage.token, userInfo).catch(
+			(error) => {
+				toast.error(`${error}`);
+				return null;
 		});
 
 		if (updatedUser) {
@@ -108,6 +142,17 @@
 		}
 
 		webhookUrl = $settings?.notifications?.webhook_url ?? '';
+
+		// Get user info (team, division, position)
+		const userInfoData = await getUserInfo(localStorage.token).catch((error) => {
+			console.log(error);
+			return {};
+		});
+		
+		team = userInfoData?.team || '';
+		headquarters = userInfoData?.headquarters || '';
+		division = userInfoData?.division || '';
+		position = userInfoData?.position || '';
 
 		APIKey = await getAPIKey(localStorage.token).catch((error) => {
 			console.log(error);
@@ -215,6 +260,70 @@
 				</div>
 			</div>
 		</div>
+
+			<div class="pt-2">
+				<div class="flex flex-col w-full">
+					<div class=" mb-1 text-xs font-medium">소속</div>
+
+					<div class="flex-1">
+						<input
+							class="w-full text-sm dark:text-gray-300 bg-transparent outline-hidden"
+							type="text"
+							bind:value={team}
+							placeholder="AI&DATA팀"
+							required
+						/>
+					</div>
+				</div>
+			</div>
+
+			<div class="pt-2">
+				<div class="flex flex-col w-full">
+					<div class=" mb-1 text-xs font-medium">본부</div>
+
+					<div class="flex-1">
+						<input
+							class="w-full text-sm dark:text-gray-300 bg-transparent outline-hidden"
+							type="text"
+							bind:value={headquarters}
+							placeholder="클라우드본부"
+							required
+						/>
+					</div>
+				</div>
+			</div>
+
+			<div class="pt-2">
+				<div class="flex flex-col w-full">
+					<div class=" mb-1 text-xs font-medium">부문</div>
+
+					<div class="flex-1">
+						<input
+							class="w-full text-sm dark:text-gray-300 bg-transparent outline-hidden"
+							type="text"
+							bind:value={division}
+							placeholder="미래성장부문"
+							required
+						/>
+					</div>
+				</div>
+			</div>
+
+			<div class="pt-2">
+				<div class="flex flex-col w-full">
+					<div class=" mb-1 text-xs font-medium">직급(직책)</div>
+
+					<div class="flex-1">
+						<input
+							class="w-full text-sm dark:text-gray-300 bg-transparent outline-hidden"
+							type="text"
+							bind:value={position}
+							placeholder="프로(선임)"
+							required
+						/>
+					</div>
+				</div>
+			</div>
 
 		{#if $config?.features?.enable_user_webhooks}
 			<div class="mt-2">

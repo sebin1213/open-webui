@@ -114,6 +114,8 @@ WEBUI_NAME = os.environ.get("WEBUI_NAME", "Open WebUI")
 if WEBUI_NAME != "Open WebUI":
     WEBUI_NAME += " (Open WebUI)"
 
+
+
 WEBUI_FAVICON_URL = "https://openwebui.com/favicon.png"
 
 TRUSTED_SIGNATURE_KEY = os.environ.get("TRUSTED_SIGNATURE_KEY", "")
@@ -344,6 +346,13 @@ else:
     except Exception:
         DATABASE_POOL_RECYCLE = 3600
 
+DATABASE_SQLITE_PATH = os.environ.get(
+    "DATABASE_SQLITE_PATH", f"{DATA_DIR}/webui.db"
+)
+DATABASE_MIGRATE_FROM_SQLITE = (
+    os.environ.get("DATABASE_MIGRATE_FROM_SQLITE", "false").lower() == "true"
+)
+
 DATABASE_ENABLE_SQLITE_WAL = (
     os.environ.get("DATABASE_ENABLE_SQLITE_WAL", "False").lower() == "true"
 )
@@ -374,6 +383,7 @@ ENABLE_QUERIES_CACHE = os.environ.get("ENABLE_QUERIES_CACHE", "False").lower() =
 ####################################
 
 REDIS_URL = os.environ.get("REDIS_URL", "")
+REDIS_SOCKET_PATH = os.environ.get("REDIS_SOCKET_PATH", "")
 REDIS_CLUSTER = os.environ.get("REDIS_CLUSTER", "False").lower() == "true"
 
 REDIS_KEY_PREFIX = os.environ.get("REDIS_KEY_PREFIX", "open-webui")
@@ -389,6 +399,27 @@ try:
         REDIS_SENTINEL_MAX_RETRY_COUNT = 2
 except ValueError:
     REDIS_SENTINEL_MAX_RETRY_COUNT = 2
+
+def _int_from_env(name: str, default: int) -> int:
+    value = os.environ.get(name, str(default))
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+REDIS_DB_SESSION = _int_from_env("REDIS_DB_SESSION", 1)
+REDIS_DB_WS = _int_from_env("REDIS_DB_WS", 0)
+REDIS_DB_CACHE = _int_from_env("REDIS_DB_CACHE", 2)
+
+SESSION_TTL_SECONDS = _int_from_env("SESSION_TTL_SECONDS", 3600)
+CACHE_TTL_SECONDS_DEFAULT = _int_from_env("CACHE_TTL_SECONDS_DEFAULT", 60)
+RATE_LIMIT_DEFAULT_PER_MIN = _int_from_env("RATE_LIMIT_DEFAULT_PER_MIN", 60)
+
+TRUSTED_PROXIES = [
+    proxy.strip()
+    for proxy in os.environ.get("TRUSTED_PROXIES", "").split(",")
+    if proxy.strip()
+]
 
 ####################################
 # UVICORN WORKERS
@@ -463,8 +494,15 @@ WEBUI_AUTH_COOKIE_SECURE = (
     == "true"
 )
 
+WEBUI_AUTH_COOKIE_HTTPONLY = (
+    os.environ.get("WEBUI_AUTH_COOKIE_HTTPONLY", "true").lower() == "true"
+)
+
 if WEBUI_AUTH and WEBUI_SECRET_KEY == "":
     raise ValueError(ERROR_MESSAGES.ENV_VAR_NOT_FOUND)
+
+if ENV.lower() == "prod" and WEBUI_SECRET_KEY in ("", "t0p-s3cr3t"):
+    raise ValueError("WEBUI_SECRET_KEY must be provided when ENV=prod")
 
 ENABLE_COMPRESSION_MIDDLEWARE = (
     os.environ.get("ENABLE_COMPRESSION_MIDDLEWARE", "True").lower() == "true"

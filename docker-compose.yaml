@@ -1,32 +1,258 @@
 services:
-  ollama:
-    volumes:
-      - ollama:/root/.ollama
-    container_name: ollama
-    pull_policy: always
-    tty: true
-    restart: unless-stopped
-    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
-
   open-webui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    image: shinhands/open-webui:1.1.2
     container_name: open-webui
-    volumes:
-      - open-webui:/app/backend/data
     depends_on:
-      - ollama
-    ports:
-      - ${OPEN_WEBUI_PORT-3000}:8080
-    environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY='
+      gotenberg:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     extra_hosts:
-      - host.docker.internal:host-gateway
+      - "apigw.aisp-shinhands.co.kr:100.75.11.51" 
     restart: unless-stopped
+    ports:
+      - "8088:8080" # 운영망 기준 8088 포트
+    volumes:
+      - ./data:/app/backend/data
+      - type: volume
+        source: openwebui-cache
+        target: /app/backend/data/cache
+        volume:
+          nocopy: false  # 이미지 내 캐시를 볼륨으로 초기 복사
+    environment:
+      WEBUI_NAME: "DS 챗봇 플랫폼"
+
+      # 런타임 환경 식별자 (운영 환경에서는 prod 등으로 지정 필요)
+      ENV: "prod"  # TODO: 실제 배포 환경명으로 조정
+      PORT: "8080"
+      HOST: "0.0.0.0"
+
+      # 기본 보안 설정 (운영 환경에 맞춰 교체 필요)
+      WEBUI_SECRET_KEY: "0c08943d90111810f293f0583c775e0e18812822decaf3dcf201c5ef25049fa2d5ef877225da0ee0fcc2a6cc6695e259c093479a9a9e06d90ee8424606c462be"  # TODO: openssl rand -hex 64 결과로 교체
+      CORS_ALLOW_ORIGIN: "*"  # TODO: 허용할 도메인 세미콜론(;) 구분 적용
+      FORWARDED_ALLOW_IPS: "*"  # TODO: 신뢰 프록시 CIDR로 조정
+
+      # 쿠키 정책 강화
+      WEBUI_SESSION_COOKIE_SECURE: "true"  # TODO: TLS 미사용 환경에서는 false로 조정
+      WEBUI_SESSION_COOKIE_SAME_SITE: "Strict"
+      WEBUI_AUTH_COOKIE_SECURE: "true"  # TODO: TLS 미사용 환경에서는 false로 조정
+      WEBUI_AUTH_COOKIE_SAME_SITE: "Strict"
+      WEBUI_AUTH_COOKIE_HTTPONLY: "true"
+
+      # 오프라인/업데이트 체크/외부 API 비활성
+      OFFLINE_MODE: "true"
+      ENABLE_VERSION_UPDATE_CHECK: "false"
+      ENABLE_OLLAMA_API: "false"
+
+      # 사용자 회원 가입 방지
+      # ENABLE_SIGNUP: "false"
+
+      # 파일 업로드 제한 (MB 단위) ※ 20MB
+      RAG_FILE_MAX_COUNT: "3"
+      RAG_FILE_MAX_SIZE: "20"
+      RAG_ALLOWED_FILE_EXTENSIONS: "pdf,docx,doc,ppt,pptx,xlsx"
+
+      # 이미지 리사이즈(없으면 원본 유지)
+      FILE_IMAGE_COMPRESSION_WIDTH: "1600"
+      FILE_IMAGE_COMPRESSION_HEIGHT: "1600"
+
+      # JWT 만료 설정
+      JWT_EXPIRES_IN: "3h"
+
+      # 모델 이름을 환경변수로 주입 (없으면 config.py의 기본값 'dp' 사용)
+      EXTERNAL_DOCUMENT_LOADER_MODEL: "dp"
+
+      # 환경변수 EXTERNAL_DOCUMENT_LOADER_MODEL_OCR 이 없으면 기본값 'force'
+      EXTERNAL_DOCUMENT_LOADER_MODEL_OCR: "force"
+
+      # PDF 변환 설정 (Gotenberg)
+      EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION: "true"
+      EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL: "http://gotenberg:3000"
+      EXTERNAL_DOCUMENT_LOADER_TEMP_DIR: "/app/backend/data/temp/pdf_conversion"
+
+      # RAG 검색 설정 (일반 문서 QA 최적화)
+      RAG_FULL_CONTEXT: "false"           # 전체 컨텍스트 모드 (기본: false)
+      ENABLE_RAG_HYBRID_SEARCH: "true"    # 하이브리드 검색 활성화 (기본: false)  
+      RAG_HYBRID_BM25_WEIGHT: "0.4"       # BM25 가중치 - 의미적 검색 우선 (기본: 0.5)
+      RAG_TOP_K: "8"                      # 초기 검색 후보 개수 (기본: 3)
+      RAG_TOP_K_RERANKER: "4"             # 리랭킹 후 최종 선택 개수 (기본: 3)
+      RAG_RELEVANCE_THRESHOLD: "0.3"      # 관련성 최소 기준 (기본: 0.0)
+      
+      # 리랭킹 모델 설정 (성능 향상)
+      RAG_RERANKING_ENGINE: ""            # 기본 sentence-transformers 사용
+      RAG_RERANKING_MODEL: "BAAI/bge-reranker-v2-m3"  # 추천 리랭킹 모델
+
+      # 후속 작업 설정
+      ENABLE_FOLLOW_UP_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
+
+      # 사용자 권한 설정
+      USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS: "false"
+      USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ACCESS: "false"
+      USER_PERMISSIONS_WORKSPACE_PROMPTS_ACCESS: "false"
+      USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS: "false"
+
+      USER_PERMISSIONS_WORKSPACE_MODELS_ALLOW_PUBLIC_SHARING: "false"
+      USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ALLOW_PUBLIC_SHARING: "false"
+      USER_PERMISSIONS_WORKSPACE_PROMPTS_ALLOW_PUBLIC_SHARING: "false"
+      USER_PERMISSIONS_WORKSPACE_TOOLS_ALLOW_PUBLIC_SHARING: "false"
+
+      USER_PERMISSIONS_CHAT_CONTROLS: "false"
+      USER_PERMISSIONS_CHAT_SYSTEM_PROMPT: "false"
+      USER_PERMISSIONS_CHAT_FILE_UPLOAD: "true"
+      USER_PERMISSIONS_CHAT_DELETE: "true"
+      USER_PERMISSIONS_CHAT_EDIT: "true"
+      USER_PERMISSIONS_CHAT_SHARE: "true"
+      USER_PERMISSIONS_CHAT_EXPORT: "true"
+      USER_PERMISSIONS_CHAT_STT: "false"
+      USER_PERMISSIONS_CHAT_TTS: "false"
+      USER_PERMISSIONS_CHAT_CALL: "false"
+      USER_PERMISSIONS_CHAT_MULTIPLE_MODELS: "false"
+      USER_PERMISSIONS_CHAT_TEMPORARY: "false"
+      USER_PERMISSIONS_CHAT_TEMPORARY_ENFORCED: "false"
+
+      REDIS_PASSWORD: "Shinhan1234"
+      # Redis configuration for centralized WebSocket/session/cache management
+      REDIS_URL: "redis://:Shinhan1234@redis:6379"
+      REDIS_DB_WS: "0"
+      REDIS_DB_SESSION: "1"
+      REDIS_DB_CACHE: "2"
+      WEBSOCKET_MANAGER: "redis"
+      WEBSOCKET_REDIS_URL: "redis://:Shinhan1234@redis:6379/0"
+      REDIS_CLUSTER: "false"
+      WEBSOCKET_REDIS_CLUSTER: "false"
+
+      # 세션/캐시/레이트리밋 기본값 (운영 환경에 맞춰 조정 필요)
+      SESSION_TTL_SECONDS: "10800"  # TODO: JWT 만료(3h)와 동일/상회하도록 운영값 설정
+      CACHE_TTL_SECONDS_DEFAULT: "60"  # TODO: 서비스 특성에 맞게 조정
+      RATE_LIMIT_DEFAULT_PER_MIN: "60"  # TODO: API 부하 정책에 맞게 조정
+      TRUSTED_PROXIES: ""  # TODO: 리버스 프록시 사용 시 CIDR 기재
+
+      USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS: "false"
+      USER_PERMISSIONS_FEATURES_WEB_SEARCH: "false"
+      USER_PERMISSIONS_FEATURES_IMAGE_GENERATION: "false"      
+      USER_PERMISSIONS_FEATURES_CODE_INTERPRETER: "false"
+      USER_PERMISSIONS_FEATURES_NOTES: "false"
+
+      # 신규 버전 추가 기능 스위치
+      ENABLE_INITIAL_ADMIN_SIGNUP: "false"
+      ENABLE_SIGNUP_PASSWORD_CONFIRMATION: "true"
+      ENABLE_QUERIES_CACHE: "false"
+      CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE: "1"
+      CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES: "30"
+
+      # 런타임 및 스트리밍 안정화 설정
+      ENABLE_COMPRESSION_MIDDLEWARE: "false"
+      USE_GUNICORN: "true"
+      GUNICORN_BIND: "0.0.0.0:8080"  # TODO: 프록시와 UDS 사용 시 unix 소켓 경로로 변경
+      GUNICORN_WORKERS: "1"
+      GUNICORN_TIMEOUT: "180"
+      GUNICORN_GRACEFUL_TIMEOUT: "30"
+      GUNICORN_KEEP_ALIVE: "10"
+      APP_REQUEST_TIMEOUT_SECONDS: "180"
+
+      # Database configuration
+      DATABASE_URL: "postgresql://shinhands:Shinhan%401@postgres:5432/openwebui"  # TODO: 운영 DB 자격증명으로 교체 (%40 = '@')
+      DATABASE_MIGRATE_FROM_SQLITE: "true"
+      DATABASE_SQLITE_PATH: "/app/backend/data/webui.db"
+      DATABASE_POOL_SIZE: "10"
+      DATABASE_POOL_MAX_OVERFLOW: "20"
+      DATABASE_POOL_RECYCLE: "1800"
+
+
+      # API 요청 타임아웃 설정 (초 단위)
+      AIOHTTP_CLIENT_TIMEOUT: "300"                    # 전역 AIOHTTP 클라이언트 타임아웃 (기본: 300초)
+      AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST: "30"          # 모델 목록 조회 타임아웃 (기본: 10초)
+      AIOHTTP_CLIENT_TIMEOUT_TOOL_SERVER_DATA: "30"    # 툴 서버 데이터 조회 타임아웃 (기본: 10초)
+
+      # 데이터베이스 연결 타임아웃 설정
+      DATABASE_POOL_TIMEOUT: "60"                     # DB 연결 풀 타임아웃 (기본: 30초)
+
+      # WebSocket Redis 락 타임아웃 설정  
+      WEBSOCKET_REDIS_LOCK_TIMEOUT: "120"             # WebSocket Redis 락 타임아웃 (기본: 60초)
+
+      # PIPE_MAX_CONCURRENCY: "10"
+      # PIPE_MAX_WAIT_SECONDS: "30"
+      # PIPE_PER_CHAT_SERIALIZE: "false"
+
+  # PDF 변환 서비스 (Gotenberg)
+  gotenberg:
+    image: gotenberg-fonts-image:latest
+    container_name: open-webui-gotenberg
+    restart: unless-stopped
+    command: 
+      - "gotenberg"
+      - "--libreoffice-auto-start=true"
+      - "--libreoffice-restart-after=10"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # 내부 네트워크만 사용 (외부 포트 노출 안 함)
+    expose:
+      - "3000"
+
+  redis:
+    image: redis:6-alpine
+    container_name: open-webui-redis
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--save",
+        "60",
+        "1",
+        "--requirepass",
+        "Shinhan1234"
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a Shinhan1234 ping"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6379"
+    volumes:
+      - redis-data:/data
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: open-webui-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openwebui
+      POSTGRES_USER: shinhands
+      POSTGRES_PASSWORD: Shinhan@1
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "openwebui", "-U", "shinhands"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "5432"
 
 volumes:
-  ollama: {}
-  open-webui: {}
+  openwebui-cache: {}
+  redis-data: {}

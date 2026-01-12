@@ -1,4 +1,5 @@
 import logging
+import io
 from typing import Optional
 import base64
 import io
@@ -24,6 +25,8 @@ from open_webui.models.users import (
     UserSettings,
     UserUpdateForm,
 )
+import xlsxwriter
+from datetime import datetime
 
 
 from open_webui.socket.main import (
@@ -32,8 +35,9 @@ from open_webui.socket.main import (
     get_user_active_status,
 )
 from open_webui.constants import ERROR_MESSAGES
-from open_webui.env import SRC_LOG_LEVELS, STATIC_DIR
-
+from open_webui.env import SRC_LOG_LEVELS
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
 
 from open_webui.utils.auth import get_admin_user, get_password_hash, get_verified_user
 from open_webui.utils.access_control import get_permissions, has_permission
@@ -94,7 +98,7 @@ async def get_users(
     return Users.get_users(filter=filter, skip=skip, limit=limit)
 
 
-@router.get("/all", response_model=UserInfoListResponse)
+@router.get("/all", response_model=UserListResponse)
 async def get_all_users(
     user=Depends(get_admin_user),
 ):
@@ -319,6 +323,89 @@ async def update_user_info_by_session_user(
 
 
 ############################
+# Export Users to Excel (placed before param routes to avoid shadowing)
+############################
+
+
+@router.get("/export")
+async def export_users_to_excel(user=Depends(get_admin_user)):
+    try:
+        # Get all users
+        users_response = Users.get_users()
+        users = users_response["users"]
+
+        # Create Excel file in memory
+        output = io.BytesIO()
+        workbook = xlsxwriter.Workbook(output, {"in_memory": True})
+        worksheet = workbook.add_worksheet("사용자 목록")
+
+        # Define headers
+        headers = ["가입일자", "이름", "이메일", "소속", "본부", "부문", "직급(직책)", "역할"]
+        
+        # Header formatting
+        header_format = workbook.add_format({
+            "bold": True,
+            "bg_color": "#F2F2F2",
+            "border": 1
+        })
+
+        # Write headers
+        for col, header in enumerate(headers):
+            worksheet.write(0, col, header, header_format)
+
+        # Write user data
+        for row, user in enumerate(users, start=1):
+            created_at = datetime.fromtimestamp(user.created_at).strftime('%Y-%m-%d') if user.created_at else ''
+            team = user.info.get("team", "") if user.info else ""
+            headquarters = user.info.get("headquarters", "") if user.info else ""
+            division = user.info.get("division", "") if user.info else ""
+            position = user.info.get("position", "") if user.info else ""
+
+            worksheet.write(row, 0, created_at)
+            worksheet.write(row, 1, user.name)
+            worksheet.write(row, 2, user.email)
+            worksheet.write(row, 3, team)
+            worksheet.write(row, 4, headquarters)
+            worksheet.write(row, 5, division)
+            worksheet.write(row, 6, position)
+            worksheet.write(row, 7, user.role)
+
+        # Auto-fit columns
+        worksheet.autofilter(0, 0, len(users), len(headers) - 1)
+        worksheet.freeze_panes(1, 0)
+
+        # Set column widths
+        worksheet.set_column('A:A', 12)  # 가입일자
+        worksheet.set_column('B:B', 15)  # 이름  
+        worksheet.set_column('C:C', 25)  # 이메일
+        worksheet.set_column('D:D', 15)  # 소속
+        worksheet.set_column('E:E', 15)  # 본부
+        worksheet.set_column('F:F', 15)  # 부문
+        worksheet.set_column('G:G', 15)  # 직급
+        worksheet.set_column('H:H', 10)  # 역할
+
+        workbook.close()
+        output.seek(0)
+
+        # Generate filename with current timestamp
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"users_{current_time}.xlsx"
+
+        return Response(
+            content=output.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except Exception as e:
+        log.error(f"Error exporting users to Excel: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export users: {str(e)}"
+        )
+
+
+############################
 # GetUserById
 ############################
 
@@ -476,6 +563,18 @@ async def update_user_by_id(
             Auths.update_user_password_by_id(user_id, hashed)
 
         Auths.update_email_by_id(user_id, form_data.email.lower())
+        
+        # Prepare info data if team, division, position, or headquarters are provided
+        user_info = user.info if user.info else {}
+        if form_data.team is not None:
+            user_info["team"] = form_data.team
+        if form_data.division is not None:
+            user_info["division"] = form_data.division
+        if form_data.position is not None:
+            user_info["position"] = form_data.position
+        if form_data.headquarters is not None:
+            user_info["headquarters"] = form_data.headquarters
+        
         updated_user = Users.update_user_by_id(
             user_id,
             {
@@ -483,6 +582,7 @@ async def update_user_by_id(
                 "name": form_data.name,
                 "email": form_data.email.lower(),
                 "profile_image_url": form_data.profile_image_url,
+                "info": user_info,
             },
         )
 
@@ -548,3 +648,6 @@ async def delete_user_by_id(user_id: str, user=Depends(get_admin_user)):
 @router.get("/{user_id}/groups")
 async def get_user_groups_by_id(user_id: str, user=Depends(get_admin_user)):
     return Groups.get_groups_by_member_id(user_id)
+
+
+ 

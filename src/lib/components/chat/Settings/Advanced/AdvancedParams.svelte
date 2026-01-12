@@ -1220,7 +1220,8 @@
 		</div>
 	{/if}
 
-	<div class=" py-0.5 w-full justify-between">
+	<!-- Ollama 설정 비활성화 -->
+	<!-- <div class=" py-0.5 w-full justify-between">
 		<Tooltip
 			content={$i18n.t(
 				'This option enables or disables the use of the reasoning feature in Ollama, which allows the model to think before generating a response. When enabled, the model can take a moment to process the conversation context and generate a more thoughtful response.'
@@ -1670,5 +1671,5 @@
 				</button>
 			</div>
 		{/if}
-	{/if}
+	{/if} -->
 </div>

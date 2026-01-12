@@ -13,12 +13,14 @@ from urllib.parse import urlparse
 import requests
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column, DateTime, Integer, func
+from sqlalchemy.exc import SQLAlchemyError
 from authlib.integrations.starlette_client import OAuth
 
 
 from open_webui.env import (
     DATA_DIR,
     DATABASE_URL,
+    DATABASE_MIGRATE_FROM_SQLITE,
     ENV,
     REDIS_URL,
     REDIS_KEY_PREFIX,
@@ -32,7 +34,7 @@ from open_webui.env import (
     WEBUI_NAME,
     log,
 )
-from open_webui.internal.db import Base, get_db
+from open_webui.internal.db import Base, get_db, engine
 from open_webui.utils.redis import get_redis_connection
 
 
@@ -63,11 +65,19 @@ def run_migrations():
         alembic_cfg.set_main_option("script_location", str(migrations_path))
 
         command.upgrade(alembic_cfg, "head")
+
+        if DATABASE_MIGRATE_FROM_SQLITE:
+            try:
+                from open_webui.internal.sqlite_migrator import (
+                    migrate_sqlite_to_postgres,
+                )
+
+                if migrate_sqlite_to_postgres(engine):
+                    log.info("SQLite data migrated into PostgreSQL")
+            except Exception as exc:
+                log.exception(f"Error migrating SQLite data: {exc}")
     except Exception as e:
         log.exception(f"Error running migrations: {e}")
-
-
-run_migrations()
 
 
 class Config(Base):
@@ -104,6 +114,9 @@ def reset_config():
         db.commit()
 
 
+# Run migrations on startup to ensure database schema is up to date
+run_migrations()
+
 # When initializing, check if config.json exists and migrate it to the database
 if os.path.exists(f"{DATA_DIR}/config.json"):
     data = load_json_config()
@@ -117,9 +130,13 @@ DEFAULT_CONFIG = {
 
 
 def get_config():
-    with get_db() as db:
-        config_entry = db.query(Config).order_by(Config.id.desc()).first()
-        return config_entry.data if config_entry else DEFAULT_CONFIG
+    try:
+        with get_db() as db:
+            config_entry = db.query(Config).order_by(Config.id.desc()).first()
+            return config_entry.data if config_entry else DEFAULT_CONFIG
+    except SQLAlchemyError as exc:
+        log.debug(f"Config table unavailable, returning default config: {exc}")
+        return DEFAULT_CONFIG
 
 
 CONFIG_DATA = get_config()
@@ -893,6 +910,12 @@ if CUSTOM_NAME:
         log.exception(e)
         pass
 
+
+####################################
+# LICENSE_KEY
+####################################
+
+LICENSE_KEY = os.environ.get("LICENSE_KEY", "")
 
 ####################################
 # STORAGE PROVIDER
@@ -1694,19 +1717,19 @@ JSON format: { "follow_ups": ["Question 1?", "Question 2?", "Question 3?"] }
 ENABLE_FOLLOW_UP_GENERATION = PersistentConfig(
     "ENABLE_FOLLOW_UP_GENERATION",
     "task.follow_up.enable",
-    os.environ.get("ENABLE_FOLLOW_UP_GENERATION", "True").lower() == "true",
+    os.environ.get("ENABLE_FOLLOW_UP_GENERATION", "False").lower() == "true",
 )
 
 ENABLE_TAGS_GENERATION = PersistentConfig(
     "ENABLE_TAGS_GENERATION",
     "task.tags.enable",
-    os.environ.get("ENABLE_TAGS_GENERATION", "True").lower() == "true",
+    os.environ.get("ENABLE_TAGS_GENERATION", "False").lower() == "true",
 )
 
 ENABLE_TITLE_GENERATION = PersistentConfig(
     "ENABLE_TITLE_GENERATION",
     "task.title.enable",
-    os.environ.get("ENABLE_TITLE_GENERATION", "True").lower() == "true",
+    os.environ.get("ENABLE_TITLE_GENERATION", "False").lower() == "true",
 )
 
 
@@ -2344,6 +2367,39 @@ EXTERNAL_DOCUMENT_LOADER_API_KEY = PersistentConfig(
     "EXTERNAL_DOCUMENT_LOADER_API_KEY",
     "rag.external_document_loader_api_key",
     os.environ.get("EXTERNAL_DOCUMENT_LOADER_API_KEY", ""),
+)
+
+# 환경변수 EXTERNAL_DOCUMENT_LOADER_MODEL 이 없으면 기본값 'dp'
+EXTERNAL_DOCUMENT_LOADER_MODEL = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_MODEL",
+    "external_document_loader_model",
+    os.getenv("EXTERNAL_DOCUMENT_LOADER_MODEL", "dp"),
+)
+
+# 환경변수 EXTERNAL_DOCUMENT_LOADER_MODEL_OCR 이 없으면 기본값 'auto'
+EXTERNAL_DOCUMENT_LOADER_MODEL_OCR = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_MODEL_OCR",
+    "external_document_loader_model_ocr",
+    os.getenv("EXTERNAL_DOCUMENT_LOADER_MODEL_OCR", "auto"),
+)
+
+# PDF 변환 관련 설정 (Gotenberg)
+EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION",
+    "external_document_loader_enable_pdf_conversion",
+    os.getenv("EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION", "true").lower() == "true",
+)
+
+EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL",
+    "external_document_loader_gotenberg_url",
+    os.getenv("EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL", "http://localhost:3000"),
+)
+
+EXTERNAL_DOCUMENT_LOADER_TEMP_DIR = PersistentConfig(
+    "EXTERNAL_DOCUMENT_LOADER_TEMP_DIR",
+    "external_document_loader_temp_dir",
+    os.getenv("EXTERNAL_DOCUMENT_LOADER_TEMP_DIR", "/app/backend/data/temp/pdf_conversion"),
 )
 
 TIKA_SERVER_URL = PersistentConfig(

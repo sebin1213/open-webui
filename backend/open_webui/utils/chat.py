@@ -2,7 +2,7 @@ import time
 import logging
 import sys
 
-from aiocache import cached
+from open_webui.utils.cache import cached
 from typing import Any, Optional
 import random
 import json
@@ -38,6 +38,7 @@ from open_webui.routers.pipelines import (
 
 from open_webui.models.functions import Functions
 from open_webui.models.models import Models
+from open_webui.constants import SSE_RESPONSE_HEADERS
 
 
 from open_webui.utils.plugin import (
@@ -62,6 +63,10 @@ logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MAIN"])
 
+STREAM_QUEUE_MAXSIZE = 256
+STREAM_QUEUE_TIMEOUT = 10
+STREAM_HEARTBEAT_EVENT = {"event": "heartbeat"}
+
 
 async def generate_direct_chat_completion(
     request: Request,
@@ -83,13 +88,16 @@ async def generate_direct_chat_completion(
     logging.info(f"WebSocket channel: {channel}")
 
     if form_data.get("stream"):
-        q = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=STREAM_QUEUE_MAXSIZE)
 
         async def message_listener(sid, data):
             """
             Handle received socket messages and push them into the queue.
             """
-            await q.put(data)
+            try:
+                q.put_nowait(data)
+            except asyncio.QueueFull:
+                log.warning("stream queue full for channel %s", channel)
 
         # Register the listener
         sio.on(channel, message_listener)
@@ -115,7 +123,11 @@ async def generate_direct_chat_completion(
                 nonlocal q
                 try:
                     while True:
-                        data = await q.get()  # Wait for new messages
+                        try:
+                            data = await asyncio.wait_for(q.get(), timeout=STREAM_QUEUE_TIMEOUT)
+                        except asyncio.TimeoutError:
+                            yield f"data: {json.dumps(STREAM_HEARTBEAT_EVENT)}\n\n"
+                            continue
                         if isinstance(data, dict):
                             if "done" in data and data["done"]:
                                 break  # Stop streaming when 'done' is received
@@ -129,17 +141,27 @@ async def generate_direct_chat_completion(
                 except Exception as e:
                     log.debug(f"Error in event generator: {e}")
                     pass
+                finally:
+                    while not q.empty():
+                        try:
+                            q.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
 
             # Define a background task to run the event generator
             async def background():
                 try:
                     del sio.handlers["/"][channel]
-                except Exception as e:
-                    pass
+                    log.debug("stream handler removed for channel %s", channel)
+                except Exception:
+                    log.debug("stream handler cleanup failed for channel %s", channel)
 
             # Return the streaming response
             return StreamingResponse(
-                event_generator(), media_type="text/event-stream", background=background
+                event_generator(),
+                media_type="text/event-stream",
+                background=background,
+                headers=SSE_RESPONSE_HEADERS,
             )
         else:
             raise Exception(str(res))
@@ -244,6 +266,7 @@ async def generate_chat_completion(
                     stream_wrapper(response.body_iterator),
                     media_type="text/event-stream",
                     background=response.background,
+                    headers=SSE_RESPONSE_HEADERS,
                 )
             else:
                 return {
@@ -271,9 +294,10 @@ async def generate_chat_completion(
             )
             if form_data.get("stream"):
                 response.headers["content-type"] = "text/event-stream"
+                headers = {**dict(response.headers), **SSE_RESPONSE_HEADERS}
                 return StreamingResponse(
                     convert_streaming_response_ollama_to_openai(response),
-                    headers=dict(response.headers),
+                    headers=headers,
                     background=response.background,
                 )
             else:

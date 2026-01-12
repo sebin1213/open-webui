@@ -39,12 +39,34 @@
 		role: 'pending',
 		name: '',
 		email: '',
-		password: ''
+		password: '',
+		team: '',
+		headquarters: '',
+		division: '',
+		position: ''
 	};
 
 	let userGroups: any[] | null = null;
 
 	const submitHandler = async () => {
+		// Validate required organization fields
+		if (!_user.team?.trim()) {
+			toast.error('소속을 입력해주세요.');
+			return;
+		}
+		if (!_user.headquarters?.trim()) {
+			toast.error('본부를 입력해주세요.');
+			return;
+		}
+		if (!_user.division?.trim()) {
+			toast.error('부문을 입력해주세요.');
+			return;
+		}
+		if (!_user.position?.trim()) {
+			toast.error('직급(직책)을 입력해주세요.');
+			return;
+		}
+
 		const res = await updateUserById(localStorage.token, selectedUser.id, _user).catch((error) => {
 			toast.error(`${error}`);
 		});
@@ -64,6 +86,18 @@
 			return null;
 		});
 	};
+
+	onMount(() => {
+		if (selectedUser) {
+			_user = selectedUser;
+			_user.password = '';
+			_user.team = selectedUser.info?.team || '';
+			_user.headquarters = selectedUser.info?.headquarters || '';
+			_user.division = selectedUser.info?.division || '';
+			_user.position = selectedUser.info?.position || '';
+			loadUserGroups();
+		}
+	});
 </script>
 
 <Modal size="sm" bind:show>
@@ -164,6 +198,58 @@
 											/>
 										</div>
 									</div>
+
+							<div class="flex flex-col w-full">
+								<div class=" mb-1 text-xs text-gray-500">소속</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.team}
+										placeholder="AI&DATA팀"
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full">
+								<div class=" mb-1 text-xs text-gray-500">본부</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.headquarters}
+										placeholder="클라우드본부"
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full">
+								<div class=" mb-1 text-xs text-gray-500">부문</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.division}
+										placeholder="미래성장부문"
+									/>
+								</div>
+							</div>
+
+							<div class="flex flex-col w-full">
+								<div class=" mb-1 text-xs text-gray-500">직급(직책)</div>
+
+								<div class="flex-1">
+									<input
+										class="w-full text-sm bg-transparent outline-hidden"
+										type="text"
+										bind:value={_user.position}
+										placeholder="프로(선임)"
+									/>
+								</div>
+							</div>
 
 									<div class="flex flex-col w-full">
 										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Email')}</div>
