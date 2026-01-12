@@ -61,6 +61,7 @@ from open_webui.env import (
     WEBUI_NAME,
     WEBUI_AUTH_COOKIE_SAME_SITE,
     WEBUI_AUTH_COOKIE_SECURE,
+    WEBUI_AUTH_COOKIE_HTTPONLY,
     ENABLE_OAUTH_ID_TOKEN_COOKIE,
     ENABLE_OAUTH_EMAIL_FALLBACK,
     OAUTH_CLIENT_INFO_ENCRYPTION_KEY,
@@ -1322,7 +1323,7 @@ class OAuthManager:
         response.set_cookie(
             key="token",
             value=jwt_token,
-            httponly=False,  # Required for frontend access
+            httponly=WEBUI_AUTH_COOKIE_HTTPONLY,
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
         )
@@ -1331,8 +1332,8 @@ class OAuthManager:
         if ENABLE_OAUTH_ID_TOKEN_COOKIE:
             response.set_cookie(
                 key="oauth_id_token",
-                value=token.get("id_token"),
-                httponly=True,
+                value=oauth_id_token,
+                httponly=WEBUI_AUTH_COOKIE_HTTPONLY,
                 samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
                 secure=WEBUI_AUTH_COOKIE_SECURE,
             )

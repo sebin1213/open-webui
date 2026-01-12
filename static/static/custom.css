@@ -1,0 +1,25 @@
+@font-face {
+  font-family: 'OneShinhan';
+  src: url('/static/assets/fonts/OneShinhanLight.ttf') format('truetype');
+  font-weight: 300; /* Light */
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'OneShinhan';
+  src: url('/static/assets/fonts/OneShinhanMedium.ttf') format('truetype');
+  font-weight: 500; /* Medium */
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'OneShinhan';
+  src: url('/static/assets/fonts/OneShinhanBold.ttf') format('truetype');
+  font-weight: 700; /* Bold */
+  font-display: swap;
+}
+
+#chat-input-container,
+#chat-input-container * {
+  text-align: left !important;
+}

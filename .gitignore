@@ -310,3 +310,7 @@ dist
 cypress/videos
 cypress/screenshots
 .vscode/settings.json
+cypress.env.json
+
+# k6 test results
+k6/results/

@@ -226,7 +226,7 @@
 						</div>
 
 						<div
-							class="flex-1 mt-1 lg:mt-1 lg:h-[22rem] lg:max-h-[22rem] overflow-y-auto scrollbar-hidden"
+							class="flex-1 mt-1 lg:mt-1 lg:h-[28rem] lg:max-h-[28rem] overflow-y-auto scrollbar-hidden"
 						>
 							{#if selectedTab == 'general'}
 								<Display bind:name bind:description />

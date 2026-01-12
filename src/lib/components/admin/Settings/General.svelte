@@ -199,7 +199,8 @@
 						</div>
 
 						<div class="mt-1">
-							<div class="flex space-x-1">
+							<!-- 외부연결 링크 주석처리 -->
+							<!-- <div class="flex space-x-1">
 								<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
 									<img
 										alt="Discord"
@@ -220,7 +221,7 @@
 										src="https://img.shields.io/github/stars/open-webui/open-webui?style=social&label=Star us on Github"
 									/>
 								</a>
-							</div>
+							</div> -->
 						</div>
 					</div>
 

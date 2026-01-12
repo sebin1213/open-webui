@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from typing import Optional
-from aiocache import cached
+from open_webui.utils.cache import cached
 import aiohttp
 import anyio.to_thread
 import requests
@@ -40,7 +40,7 @@ from fastapi import (
 from fastapi.openapi.docs import get_swagger_ui_html
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from starlette_compress import CompressMiddleware
@@ -250,6 +250,11 @@ from open_webui.config import (
     DATALAB_MARKER_USE_LLM,
     EXTERNAL_DOCUMENT_LOADER_URL,
     EXTERNAL_DOCUMENT_LOADER_API_KEY,
+    EXTERNAL_DOCUMENT_LOADER_MODEL,
+    EXTERNAL_DOCUMENT_LOADER_MODEL_OCR,
+    EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION,
+    EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL,
+    EXTERNAL_DOCUMENT_LOADER_TEMP_DIR,
     TIKA_SERVER_URL,
     DOCLING_SERVER_URL,
     DOCLING_PARAMS,
@@ -840,6 +845,11 @@ app.state.config.DATALAB_MARKER_USE_LLM = DATALAB_MARKER_USE_LLM
 app.state.config.DATALAB_MARKER_OUTPUT_FORMAT = DATALAB_MARKER_OUTPUT_FORMAT
 app.state.config.EXTERNAL_DOCUMENT_LOADER_URL = EXTERNAL_DOCUMENT_LOADER_URL
 app.state.config.EXTERNAL_DOCUMENT_LOADER_API_KEY = EXTERNAL_DOCUMENT_LOADER_API_KEY
+app.state.config.EXTERNAL_DOCUMENT_LOADER_MODEL = EXTERNAL_DOCUMENT_LOADER_MODEL
+app.state.config.EXTERNAL_DOCUMENT_LOADER_MODEL_OCR = EXTERNAL_DOCUMENT_LOADER_MODEL_OCR
+app.state.config.EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION = EXTERNAL_DOCUMENT_LOADER_ENABLE_PDF_CONVERSION
+app.state.config.EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL = EXTERNAL_DOCUMENT_LOADER_GOTENBERG_URL
+app.state.config.EXTERNAL_DOCUMENT_LOADER_TEMP_DIR = EXTERNAL_DOCUMENT_LOADER_TEMP_DIR
 app.state.config.TIKA_SERVER_URL = TIKA_SERVER_URL
 app.state.config.DOCLING_SERVER_URL = DOCLING_SERVER_URL
 app.state.config.DOCLING_PARAMS = DOCLING_PARAMS
@@ -1236,17 +1246,51 @@ async def commit_session_after_request(request: Request, call_next):
     return response
 
 
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    return PlainTextResponse("ok")
+
+
 @app.middleware("http")
 async def check_url(request: Request, call_next):
-    start_time = int(time.time())
+    start_time = time.perf_counter()
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request.state.request_id = request_id
     request.state.token = get_http_authorization_cred(
         request.headers.get("Authorization")
     )
 
     request.state.enable_api_key = app.state.config.ENABLE_API_KEY
-    response = await call_next(request)
-    process_time = int(time.time()) - start_time
-    response.headers["X-Process-Time"] = str(process_time)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        log.error(
+            json.dumps(
+                {
+                    "event": "request_error",
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error": str(exc),
+                }
+            )
+        )
+        raise
+    process_time = time.perf_counter() - start_time
+    response.headers["X-Process-Time"] = f"{process_time:.6f}"
+    response.headers["X-Request-ID"] = request_id
+    log.info(
+        json.dumps(
+            {
+                "event": "request_completed",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "process_time_ms": round(process_time * 1000, 3),
+            }
+        )
+    )
     return response
 
 
@@ -1316,6 +1360,8 @@ app.include_router(
     evaluations.router, prefix="/api/v1/evaluations", tags=["evaluations"]
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
+from open_webui.routers import statistics
+app.include_router(statistics.router, prefix="/api/v1/statistics", tags=["statistics"])
 
 # SCIM 2.0 API for identity management
 if SCIM_ENABLED:
@@ -1435,6 +1481,7 @@ async def chat_completion(
     form_data: dict,
     user=Depends(get_verified_user),
 ):
+
     if not request.app.state.MODELS:
         await get_all_models(request, user=user)
 

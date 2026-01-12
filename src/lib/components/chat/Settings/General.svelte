@@ -4,7 +4,7 @@
 	import { getLanguages, changeLanguage } from '$lib/i18n';
 	const dispatch = createEventDispatcher();
 
-	import { config, models, settings, theme, user } from '$lib/stores';
+	import { WEBUI_NAME, config, models, settings, theme, user } from '$lib/stores';
 
 	const i18n = getContext('i18n');
 
@@ -193,7 +193,8 @@
 <div class="flex flex-col h-full justify-between text-sm" id="tab-general">
 	<div class="  overflow-y-scroll max-h-[28rem] md:max-h-full">
 		<div class="">
-			<div class=" mb-1 text-sm font-medium">{$i18n.t('WebUI Settings')}</div>
+			<!-- <div class=" mb-1 text-sm font-medium">{$i18n.t('WebUI Settings')}</div> -->
+			<div class=" mb-1 text-sm font-medium">{$i18n.t('{{name}} Settings', { name: $WEBUI_NAME })}</div>
 
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs font-medium">{$i18n.t('Theme')}</div>

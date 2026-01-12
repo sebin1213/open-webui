@@ -6,7 +6,7 @@ import base64
 import textwrap
 
 import asyncio
-from aiocache import cached
+from open_webui.utils.cache import cached
 from typing import Any, Optional
 import random
 import json

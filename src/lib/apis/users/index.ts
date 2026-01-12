@@ -431,11 +431,15 @@ export const deleteUserById = async (token: string, userId: string) => {
 };
 
 type UserUpdateForm = {
-	role: string;
-	profile_image_url: string;
-	email: string;
-	name: string;
-	password: string;
+    role: string;
+    profile_image_url: string;
+    email: string;
+    name: string;
+    password: string;
+    team?: string;
+    headquarters?: string;
+    division?: string;
+    position?: string;
 };
 
 export const updateUserById = async (token: string, userId: string, user: UserUpdateForm) => {
@@ -447,14 +451,18 @@ export const updateUserById = async (token: string, userId: string, user: UserUp
 			'Content-Type': 'application/json',
 			Authorization: `Bearer ${token}`
 		},
-		body: JSON.stringify({
-			profile_image_url: user.profile_image_url,
-			role: user.role,
-			email: user.email,
-			name: user.name,
-			password: user.password !== '' ? user.password : undefined
-		})
-	})
+        body: JSON.stringify({
+            profile_image_url: user.profile_image_url,
+            role: user.role,
+            email: user.email,
+            name: user.name,
+            password: user.password !== '' ? user.password : undefined,
+            team: user.team,
+            headquarters: user.headquarters,
+            division: user.division,
+            position: user.position
+        })
+    })
 		.then(async (res) => {
 			if (!res.ok) throw await res.json();
 			return res.json();
@@ -470,6 +478,39 @@ export const updateUserById = async (token: string, userId: string, user: UserUp
 	}
 
 	return res;
+};
+export const exportUsersToExcel = async (token: string) => {
+	const res = await fetch(`${WEBUI_API_BASE_URL}/users/export`, {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		}
+	});
+	
+	if (!res.ok) {
+		const contentType = res.headers.get('content-type');
+		if (contentType && contentType.includes('application/json')) {
+			throw await res.json();
+		} else {
+			const text = await res.text();
+			throw new Error(`Server error (${res.status}): ${text.substring(0, 100)}`);
+		}
+	}
+	
+	const blob = await res.blob();
+	const url = window.URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	
+	// Generate filename with current timestamp
+	const currentTime = new Date().toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
+	a.download = `users_${currentTime}.xlsx`;
+	
+	document.body.appendChild(a);
+	a.click();
+	window.URL.revokeObjectURL(url);
+	document.body.removeChild(a);
 };
 
 export const getUserGroupsById = async (token: string, userId: string) => {

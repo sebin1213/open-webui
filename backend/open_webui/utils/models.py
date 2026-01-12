@@ -3,7 +3,7 @@ import logging
 import asyncio
 import sys
 
-from aiocache import cached
+from open_webui.utils.cache import cached
 from fastapi import Request
 
 from open_webui.routers import openai, ollama
@@ -314,6 +314,7 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
 
 
 def check_model_access(user, model):
+    
     if model.get("arena"):
         if not has_access(
             user.id,
@@ -324,16 +325,21 @@ def check_model_access(user, model):
         ):
             raise Exception("Model not found")
     else:
+        ## log
+        logging.info("[checking model access] : Model ID : " + model.get("id"))
+        logging.info("[checking model access] : User ID : " + user.id)
+
         model_info = Models.get_model_by_id(model.get("id"))
+        logging.debug(f"Checking model access for user: {user.id}, model: {model}")
         if not model_info:
-            raise Exception("Model not found")
+            raise Exception("Model ID not found")
         elif not (
             user.id == model_info.user_id
             or has_access(
                 user.id, type="read", access_control=model_info.access_control
             )
         ):
-            raise Exception("Model not found")
+            raise Exception("Model not found, you do not have access to this model.")
 
 
 def get_filtered_models(models, user):

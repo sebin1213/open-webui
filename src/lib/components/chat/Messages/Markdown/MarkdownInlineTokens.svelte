@@ -30,12 +30,31 @@
 	{:else if token.type === 'html'}
 		<HtmlToken {id} {token} {onSourceClick} />
 	{:else if token.type === 'link'}
+		<!-- 마크다운 형태 응답에서 링크 처리: data URI는 다운로드 허용, 나머지는 모달 -->
 		{#if token.tokens}
-			<a href={token.href} target="_blank" rel="nofollow" title={token.title}>
+			<a href={token.href} 
+			   download={token.href.startsWith('data:') ? (token.title || 'download') : undefined}
+			   on:click={(event) => {
+				   if (token.href.startsWith('data:')) {
+					   // Data URI는 다운로드 허용
+					   return;
+				   }
+				   event.preventDefault(); // Prevent default behavior for non-data URIs
+				   onSourceClick(token.href); // Trigger modal opening
+			   }} title={token.title}>
 				<svelte:self id={`${id}-a`} tokens={token.tokens} {onSourceClick} {done} />
 			</a>
 		{:else}
-			<a href={token.href} target="_blank" rel="nofollow" title={token.title}>{token.text}</a>
+			<a href={token.href} 
+			   download={token.href.startsWith('data:') ? (token.title || 'download') : undefined}
+			   on:click={(event) => {
+				   if (token.href.startsWith('data:')) {
+					   // Data URI는 다운로드 허용
+					   return;
+				   }
+				   event.preventDefault(); // Prevent default behavior for non-data URIs
+				   onSourceClick(token.href); // Trigger modal opening
+			   }} title={token.title}>{token.text}</a>
 		{/if}
 	{:else if token.type === 'image'}
 		<Image src={token.href} alt={token.text} />

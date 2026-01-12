@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 
 import aiohttp
-from aiocache import cached
+from open_webui.utils.cache import cached
 import requests
 from urllib.parse import quote
 
@@ -35,7 +35,7 @@ from open_webui.env import (
 )
 from open_webui.models.users import UserModel
 
-from open_webui.constants import ERROR_MESSAGES
+from open_webui.constants import ERROR_MESSAGES, SSE_RESPONSE_HEADERS
 from open_webui.env import SRC_LOG_LEVELS
 
 
@@ -66,21 +66,20 @@ async def send_get_request(url, key=None, user: UserModel = None):
     timeout = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST)
     try:
         async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+            headers = {}
+            apply_authorization_header(headers, key)
+            if ENABLE_FORWARD_USER_INFO_HEADERS and user:
+                headers.update(
+                    {
+                        "X-OpenWebUI-User-Name": quote(user.name, safe=" "),
+                        "X-OpenWebUI-User-Id": user.id,
+                        "X-OpenWebUI-User-Email": user.email,
+                        "X-OpenWebUI-User-Role": user.role,
+                    }
+                )
             async with session.get(
                 url,
-                headers={
-                    **({"Authorization": f"Bearer {key}"} if key else {}),
-                    **(
-                        {
-                            "X-OpenWebUI-User-Name": quote(user.name, safe=" "),
-                            "X-OpenWebUI-User-Id": user.id,
-                            "X-OpenWebUI-User-Email": user.email,
-                            "X-OpenWebUI-User-Role": user.role,
-                        }
-                        if ENABLE_FORWARD_USER_INFO_HEADERS and user
-                        else {}
-                    ),
-                },
+                headers=headers,
                 ssl=AIOHTTP_CLIENT_SESSION_SSL,
             ) as response:
                 return await response.json()
@@ -188,7 +187,7 @@ async def get_headers_and_cookies(
         token = get_microsoft_entra_id_access_token()
 
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["Authorization"] = token
 
     if config.get("headers") and isinstance(config.get("headers"), dict):
         headers = {**headers, **config.get("headers")}
@@ -209,6 +208,19 @@ def get_microsoft_entra_id_access_token():
     except Exception as e:
         log.error(f"Error getting Microsoft Entra ID access token: {e}")
         return None
+
+
+def apply_authorization_header(headers: dict[str, str], key: Optional[str]) -> None:
+    """
+    Apply the Authorization header without enforcing a specific prefix so providers
+    that require custom schemes (e.g. Bearer, Basic) can be configured via the UI.
+    """
+    if not key:
+        return
+
+    value = key.strip() if isinstance(key, str) else str(key).strip()
+    if value:
+        headers["Authorization"] = value
 
 
 ##########################################
@@ -314,6 +326,30 @@ async def speech(request: Request, user=Depends(get_verified_user)):
 
         r = None
         try:
+            headers = {
+                "Content-Type": "application/json",
+                **(
+                    {
+                        "HTTP-Referer": "https://openwebui.com/",
+                        "X-Title": "Open WebUI",
+                    }
+                    if "openrouter.ai" in url
+                    else {}
+                ),
+                **(
+                    {
+                        "X-OpenWebUI-User-Name": quote(user.name, safe=" "),
+                        "X-OpenWebUI-User-Id": user.id,
+                        "X-OpenWebUI-User-Email": user.email,
+                        "X-OpenWebUI-User-Role": user.role,
+                    }
+                    if ENABLE_FORWARD_USER_INFO_HEADERS
+                    else {}
+                ),
+            }
+            apply_authorization_header(
+                headers, request.app.state.config.OPENAI_API_KEYS[idx]
+            )
             r = requests.post(
                 url=f"{url}/audio/speech",
                 data=body,
@@ -583,6 +619,8 @@ async def get_models(
                         "object": "list",
                     }
                 else:
+                    apply_authorization_header(headers, key)
+
                     async with session.get(
                         f"{url}/models",
                         headers=headers,
@@ -693,6 +731,8 @@ async def verify_connection(
 
                     return response_data
             else:
+                apply_authorization_header(headers, key)
+
                 async with session.get(
                     f"{url}/models",
                     headers=headers,
@@ -921,6 +961,7 @@ async def generate_chat_completion(
         request_url = f"{request_url}/chat/completions?api-version={api_version}"
     else:
         request_url = f"{url}/chat/completions"
+        apply_authorization_header(headers, key)
 
     payload = json.dumps(payload)
 
@@ -946,10 +987,11 @@ async def generate_chat_completion(
         # Check if response is SSE
         if "text/event-stream" in r.headers.get("Content-Type", ""):
             streaming = True
+            headers = {**dict(r.headers), **SSE_RESPONSE_HEADERS}
             return StreamingResponse(
                 r.content,
                 status_code=r.status,
-                headers=dict(r.headers),
+                headers=headers,
                 background=BackgroundTask(
                     cleanup_response, response=r, session=session
                 ),
@@ -1018,6 +1060,20 @@ async def embeddings(request: Request, form_data: dict, user):
     )
     try:
         session = aiohttp.ClientSession(trust_env=True)
+        headers = {
+            "Content-Type": "application/json",
+            **(
+                {
+                    "X-OpenWebUI-User-Name": quote(user.name, safe=" "),
+                    "X-OpenWebUI-User-Id": user.id,
+                    "X-OpenWebUI-User-Email": user.email,
+                    "X-OpenWebUI-User-Role": user.role,
+                }
+                if ENABLE_FORWARD_USER_INFO_HEADERS and user
+                else {}
+            ),
+        }
+        apply_authorization_header(headers, key)
         r = await session.request(
             method="POST",
             url=f"{url}/embeddings",
@@ -1105,6 +1161,7 @@ async def proxy(path: str, request: Request, user=Depends(get_verified_user)):
 
             request_url = f"{url}/{path}?api-version={api_version}"
         else:
+            apply_authorization_header(headers, key)
             request_url = f"{url}/{path}"
 
         session = aiohttp.ClientSession(trust_env=True)

@@ -32,6 +32,10 @@
 	let name = '';
 	let email = '';
 	let password = '';
+	let team = '';
+	let headquarters = '';
+	let division = '';
+	let position = '';
 	let confirmPassword = '';
 
 	let ldapUsername = '';
@@ -66,6 +70,24 @@
 	};
 
 	const signUpHandler = async () => {
+		// Validate required organization fields
+		if (!team?.trim()) {
+			toast.error('소속을 입력해주세요.');
+			return;
+		}
+		if (!headquarters?.trim()) {
+			toast.error('본부를 입력해주세요.');
+			return;
+		}
+		if (!division?.trim()) {
+			toast.error('부문을 입력해주세요.');
+			return;
+		}
+		if (!position?.trim()) {
+			toast.error('직급(직책)을 입력해주세요.');
+			return;
+		}
+
 		if ($config?.features?.enable_signup_password_confirmation) {
 			if (password !== confirmPassword) {
 				toast.error($i18n.t('Passwords do not match.'));
@@ -73,7 +95,7 @@
 			}
 		}
 
-		const sessionUser = await userSignUp(name, email, password, generateInitialsImage(name)).catch(
+		const sessionUser = await userSignUp(name, email, password, generateInitialsImage(name), team, headquarters, division, position).catch(
 			(error) => {
 				toast.error(`${error}`);
 				return null;
@@ -279,6 +301,62 @@
 													class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
 													autocomplete="name"
 													placeholder={$i18n.t('Enter Your Full Name')}
+													required
+												/>
+											</div>
+
+											<div class="mb-2">
+												<label for="team" class="text-sm font-medium text-left mb-1 block"
+													>소속</label
+												>
+												<input
+													bind:value={team}
+													type="text"
+													id="team"
+													class="my-0.5 w-full text-sm outline-hidden bg-transparent"
+													placeholder="AI&DATA팀"
+													required
+												/>
+											</div>
+
+											<div class="mb-2">
+												<label for="headquarters" class="text-sm font-medium text-left mb-1 block"
+													>본부</label
+												>
+												<input
+													bind:value={headquarters}
+													type="text"
+													id="headquarters"
+													class="my-0.5 w-full text-sm outline-hidden bg-transparent"
+													placeholder="클라우드본부"
+													required
+												/>
+											</div>
+
+											<div class="mb-2">
+												<label for="division" class="text-sm font-medium text-left mb-1 block"
+													>부문</label
+												>
+												<input
+													bind:value={division}
+													type="text"
+													id="division"
+													class="my-0.5 w-full text-sm outline-hidden bg-transparent"
+													placeholder="미래성장부문"
+													required
+												/>
+											</div>
+
+											<div class="mb-2">
+												<label for="position" class="text-sm font-medium text-left mb-1 block"
+													>직급(직책)</label
+												>
+												<input
+													bind:value={position}
+													type="text"
+													id="position"
+													class="my-0.5 w-full text-sm outline-hidden bg-transparent"
+													placeholder="프로(선임)"
 													required
 												/>
 											</div>

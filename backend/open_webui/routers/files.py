@@ -40,6 +40,7 @@ from open_webui.routers.retrieval import ProcessFileForm, process_file
 from open_webui.routers.audio import transcribe
 from open_webui.storage.provider import Storage
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.rate_limit import enforce_rate_limit
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
@@ -163,6 +164,14 @@ def upload_file_handler(
 ):
     log.info(f"file.content_type: {file.content_type}")
 
+    enforce_rate_limit(
+        identifier=str(user.id),
+        route="api/files/upload",
+        limit=10,
+        window_seconds=3600,
+        detail="Upload rate limit exceeded. Please try again later.",
+    )
+
     if isinstance(metadata, str):
         try:
             metadata = json.loads(metadata)
@@ -190,7 +199,7 @@ def upload_file_handler(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=ERROR_MESSAGES.DEFAULT(
-                        f"File type {file_extension} is not allowed"
+                        f"{file_extension} 파일 확장자는 허용되지 않습니다. PDF로 변환 후 업로드해주세요. \n 허용 가능 확장자 : {request.app.state.config.ALLOWED_FILE_EXTENSIONS}"
                     ),
                 )
 
@@ -260,7 +269,24 @@ def upload_file_handler(
                     detail=ERROR_MESSAGES.DEFAULT("Error uploading file"),
                 )
 
+    # except Exception as e:
+    #     log.exception(e)
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail=ERROR_MESSAGES.DEFAULT("Error uploading file"),
+    #     )
+        # 핵심 수정 부분: HTTPException을 먼저 처리하여 구체적인 메시지 보존
+    except HTTPException:
+        # HTTPException은 이미 적절한 status_code와 detail을 가지고 있으므로 그대로 re-raise
+        raise
+    except json.JSONDecodeError:
+        # JSON 파싱 오류 (위에서 이미 처리되지만 혹시 모를 경우를 대비)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_MESSAGES.DEFAULT("Invalid metadata format")
+        )
     except Exception as e:
+        # 그 외 모든 예외는 일반적인 "Error uploading file" 메시지
         log.exception(e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

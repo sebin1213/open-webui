@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Optional, Union
 from urllib.parse import urlparse
 import aiohttp
-from aiocache import cached
+from open_webui.utils.cache import cached
 import requests
 from urllib.parse import quote
 
@@ -38,6 +38,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, validator
 from starlette.background import BackgroundTask
+
+from open_webui.constants import SSE_RESPONSE_HEADERS
 
 
 from open_webui.models.models import Models
@@ -179,6 +181,9 @@ async def send_post_request(
 
             if content_type:
                 response_headers["Content-Type"] = content_type
+
+            if "text/event-stream" in response_headers.get("Content-Type", ""):
+                response_headers.update(SSE_RESPONSE_HEADERS)
 
             return StreamingResponse(
                 r.content,
@@ -1852,4 +1857,8 @@ async def upload_model(
             res = {"error": str(e)}
             yield f"data: {json.dumps(res)}\n\n"
 
-    return StreamingResponse(file_process_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        file_process_stream(),
+        media_type="text/event-stream",
+        headers=SSE_RESPONSE_HEADERS,
+    )

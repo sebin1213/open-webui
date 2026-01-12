@@ -83,10 +83,18 @@ class SignupForm(BaseModel):
     email: str
     password: str
     profile_image_url: Optional[str] = "/user.png"
+    team: Optional[str] = None
+    headquarters: Optional[str] = None
+    division: Optional[str] = None
+    position: Optional[str] = None
 
 
 class AddUserForm(SignupForm):
     role: Optional[str] = "pending"
+
+
+class InvalidateSessionsForm(BaseModel):
+    user_id: str
 
 
 class AuthsTable:

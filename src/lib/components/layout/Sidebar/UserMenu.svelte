@@ -152,7 +152,8 @@
 				<!-- {$i18n.t('Help')} -->
 
 				{#if $user?.role === 'admin'}
-					<DropdownMenu.Item
+					<!-- 외부 링크 비활성화 -->
+				<!-- <DropdownMenu.Item
 						as="a"
 						target="_blank"
 						class="flex gap-2 items-center py-1.5 px-3 text-sm select-none w-full cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition"
@@ -164,10 +165,11 @@
 					>
 						<QuestionMarkCircle className="size-5" />
 						<div class="flex items-center">{$i18n.t('Documentation')}</div>
-					</DropdownMenu.Item>
+					</DropdownMenu.Item> -->
 
 					<!-- Releases -->
-					<DropdownMenu.Item
+					 <!-- 외부 링크 비활성화 -->
+				<!-- <DropdownMenu.Item
 						as="a"
 						target="_blank"
 						class="flex gap-2 items-center py-1.5 px-3 text-sm select-none w-full cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition"
@@ -179,7 +181,7 @@
 					>
 						<Map className="size-5" />
 						<div class="flex items-center">{$i18n.t('Releases')}</div>
-					</DropdownMenu.Item>
+					</DropdownMenu.Item> -->
 				{/if}
 
 				<DropdownMenu.Item
@@ -219,7 +221,9 @@
 				<div class=" self-center truncate">{$i18n.t('Sign Out')}</div>
 			</DropdownMenu.Item>
 
-			{#if usage}
+			<!-- 활성 사용자 정보 관리자 계정에서만 표기 -->
+			<!-- {#if usage} -->
+			{#if role === 'admin' && usage}
 				{#if usage?.user_ids?.length > 0}
 					<hr class=" border-gray-50 dark:border-gray-800 my-1 p-0" />
 

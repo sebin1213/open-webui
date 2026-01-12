@@ -5,7 +5,7 @@ import logging
 
 import redis
 
-from open_webui.env import REDIS_SENTINEL_MAX_RETRY_COUNT
+from open_webui.env import REDIS_SENTINEL_MAX_RETRY_COUNT, REDIS_SOCKET_PATH
 
 log = logging.getLogger(__name__)
 
@@ -153,7 +153,12 @@ def get_redis_connection(
             return redis.cluster.RedisCluster.from_url(
                 redis_url, decode_responses=decode_responses
             )
-        elif redis_url:
+        elif redis_url or REDIS_SOCKET_PATH:
+            if REDIS_SOCKET_PATH:
+                return redis.Redis(
+                    unix_socket_path=REDIS_SOCKET_PATH,
+                    decode_responses=decode_responses,
+                )
             connection = redis.from_url(redis_url, decode_responses=decode_responses)
     else:
         import redis
@@ -179,7 +184,12 @@ def get_redis_connection(
             return redis.cluster.RedisCluster.from_url(
                 redis_url, decode_responses=decode_responses
             )
-        elif redis_url:
+        elif redis_url or REDIS_SOCKET_PATH:
+            if REDIS_SOCKET_PATH:
+                return redis.Redis(
+                    unix_socket_path=REDIS_SOCKET_PATH,
+                    decode_responses=decode_responses,
+                )
             connection = redis.Redis.from_url(
                 redis_url, decode_responses=decode_responses
             )

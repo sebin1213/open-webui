@@ -79,7 +79,6 @@ class ERROR_MESSAGES(str, Enum):
     OLLAMA_NOT_FOUND = "WebUI could not connect to Ollama"
     CREATE_API_KEY_ERROR = "Oops! Something went wrong while creating your API key. Please try again later. If the issue persists, contact support for assistance."
     API_KEY_CREATION_NOT_ALLOWED = "API key creation is not allowed in the environment."
-
     EMPTY_CONTENT = "The content provided is empty. Please ensure that there is text or data present before proceeding."
 
     DB_NOT_SQLITE = "This feature is only available when running with SQLite databases."
@@ -120,3 +119,9 @@ class TASKS(str, Enum):
     AUTOCOMPLETE_GENERATION = "autocomplete_generation"
     FUNCTION_CALLING = "function_calling"
     MOA_RESPONSE_GENERATION = "moa_response_generation"
+
+
+SSE_RESPONSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+}
