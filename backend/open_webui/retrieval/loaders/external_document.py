@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
+from open_webui.utils.headers import include_user_info_headers
 from open_webui.env import SRC_LOG_LEVELS
 from open_webui.config import EXTERNAL_DOCUMENT_LOADER_MODEL, EXTERNAL_DOCUMENT_LOADER_MODEL_OCR, EXTERNAL_DOCUMENT_LOADER_TEMP_DIR
 
@@ -36,6 +37,7 @@ class ExternalDocumentLoader(BaseLoader):
         url: str,
         api_key: str,
         mime_type=None,
+        user=None,
         **kwargs,
     ) -> None:
         self.url = url
@@ -49,6 +51,8 @@ class ExternalDocumentLoader(BaseLoader):
         self.enable_pdf_conversion = kwargs.get('enable_pdf_conversion', True)
         self.gotenberg_url = kwargs.get('gotenberg_url', None)
         self._temp_files = []  # 임시 파일 추적
+
+        self.user = user
 
     def load(self) -> List[Document]:
         try:
@@ -160,6 +164,13 @@ class ExternalDocumentLoader(BaseLoader):
         except Exception:
             pass
 
+
+        if self.user is not None:
+            headers = include_user_info_headers(headers, self.user)
+
+        url = self.url
+        if url.endswith("/"):
+            url = url[:-1]
         # 파일 준비
         with open(file_path, "rb") as f:
             # 변환된 파일의 경우 적절한 MIME 타입과 파일명 설정

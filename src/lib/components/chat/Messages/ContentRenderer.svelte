@@ -188,7 +188,7 @@
 		onSourceClick={(url) => handleLinkClick(url)}
 		{onTaskClick}
 		{onSave}
-		onUpdate={(token) => {
+		onUpdate={async (token) => {
 			const { lang, text: code } = token;
 
 			if (
@@ -197,6 +197,7 @@
 				!$mobile &&
 				$chatId
 			) {
+				await tick();
 				showArtifacts.set(true);
 				showControls.set(true);
 			}
